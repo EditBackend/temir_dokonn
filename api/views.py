@@ -83,7 +83,7 @@ def sales_summary(request):
     daily_product_sales = (
         sales
         .annotate(date=TruncDate('created_at'))
-        .values('date', 'product__id', 'product__name')
+        .values('date', 'product_id', 'product_name')
         .annotate(
             sold_quantity=Sum('quantity'),
             total_sales=Sum('total_price'),
