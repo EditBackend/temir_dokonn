@@ -20,11 +20,9 @@ class Product(models.Model):
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
-    # 👆 YANGI QATOR
 
     class Meta:
         ordering = ['-created_at']
-        # 👆 yangi mahsulot har doim 1-da
 
     def __str__(self):
         return self.name if self.name else "Nomsiz mahsulot"
@@ -44,7 +42,6 @@ class Sale(models.Model):
 
     class Meta:
         ordering = ['-created_at']
-        # 👆 eng oxirgi sotuv tepada
 
     def save(self, *args, **kwargs):
         self.total_price = self.quantity * self.price

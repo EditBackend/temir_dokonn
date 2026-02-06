@@ -3,10 +3,9 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 from django.http import JsonResponse
-from django.db.models import Sum
+from django.db.models import Sum, F
 from django.db.models.functions import TruncDate
 from django.utils.dateparse import parse_date
-# from rest_framework.permissions import IsAuthenticated
 
 from .models import Product, Sale
 from .serializers import ProductSerializer, SaleSerializer
@@ -21,19 +20,11 @@ class ProductViewSet(ModelViewSet):
     serializer_class = ProductSerializer
 
 
-
 class SaleViewSet(ModelViewSet):
     queryset = Sale.objects.all().order_by('-created_at')
-    # 👆 YANGI SOTUVLAR HAR DOIM TEPADA
     serializer_class = SaleSerializer
-    # permission_classes = [IsAuthenticated]
 
     def create(self, request, *args, **kwargs):
-        """
-        Sotish tugmasi bosilganda:
-        - Sale yoziladi
-        - Product.quantity kamayadi
-        """
         product_id = request.data.get('product')
         quantity = int(request.data.get('quantity'))
         price = float(request.data.get('price'))
@@ -53,7 +44,6 @@ class SaleViewSet(ModelViewSet):
             customer=request.data.get('customer')
         )
 
-        # Ombordagi miqdorni kamaytirish
         product.quantity -= quantity
         product.save()
 
@@ -76,26 +66,24 @@ def sales_summary(request):
             ]
         )
 
-    # total_income = sales.aggregate(
-    #     total=Sum('total_price')
-    # )['total'] or 0
-
     daily_product_sales = (
         sales
         .annotate(date=TruncDate('created_at'))
-        .values('date', 'product_id', 'product_name')
+        .values(
+            'date',
+            'product_id',
+            product_name=F('product__name')  # 👈 ICHKI __, TASHQI _
+        )
         .annotate(
             sold_quantity=Sum('quantity'),
             total_sales=Sum('total_price'),
             price=Sum('total_price') / Sum('quantity')
         )
         .order_by('-date')
-        # 👆 hisobotda ham eng yangi sana tepada chiqadi
     )
 
     return JsonResponse({
         "sana_from": sana_from,
         "sana_to": sana_to,
-        # "jami_kirim": total_income,
         "hisobot": list(daily_product_sales)
     })

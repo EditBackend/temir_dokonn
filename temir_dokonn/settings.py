@@ -22,7 +22,7 @@ SECRET_KEY = 'django-insecure-6#5&%g7@q(-&81^ehb1&m*+x9$+q0@%0+7r6#0b4ad(=zpm_ap
 DEBUG = True
 
 ALLOWED_HOSTS = [
-    "temir-dokonn-5.onrender.com",
+    "temir-dokonn-6.onrender.com",
     "localhost",
     "127.0.0.1",
 ]
@@ -82,11 +82,11 @@ WSGI_APPLICATION = 'temir_dokonn.wsgi.application'
 CORS_ALLOW_ALL_ORIGINS = True
 
 CORS_ALLOWED_ORIGINS = [
-    "https://temir-dokonn-5.onrender.com",
+    "https://temir-dokonn-6.onrender.com",
 ]
 
 CSRF_TRUSTED_ORIGINS = [
-    "https://temir-dokonn-5.onrender.com",
+    "https://temir-dokonn-6.onrender.com",
 ]
 
 
