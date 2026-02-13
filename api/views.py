@@ -7,17 +7,34 @@ from django.db.models import Sum, F
 from django.db.models.functions import TruncDate
 from django.utils.dateparse import parse_date
 
-from .models import Product, Sale
-from .serializers import ProductSerializer, SaleSerializer
+from .models import Product, Sale, Category
+from .serializers import (
+    ProductSerializer,
+    SaleSerializer,
+    CategorySerializer
+)
 
 
 def home(request):
-    return JsonResponse({"message": "Temir Shop Backend ishlayapti!"})
+    return JsonResponse({"message": "Temir dokon Backend ishlayapti!"})
+
+
+class CategoryViewSet(ModelViewSet):
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
 
 
 class ProductViewSet(ModelViewSet):
-    queryset = Product.objects.all()
     serializer_class = ProductSerializer
+
+    def get_queryset(self):
+        queryset = Product.objects.all()
+        category_id = self.request.query_params.get("category")
+
+        if category_id:
+            queryset = queryset.filter(category_id=category_id)
+
+        return queryset
 
 
 class SaleViewSet(ModelViewSet):
@@ -70,14 +87,16 @@ def sales_summary(request):
         sales
         .annotate(date=TruncDate('created_at'))
         .values(
-            'date',
+            'created_at',
             'product_id',
-            product_name=F('product__name')  # 👈 ICHKI __, TASHQI _
+            'quantity',
+            'price',
+            'customer',
+            product_name=F('product__name'),
         )
         .annotate(
-            sold_quantity=Sum('quantity'),
             total_sales=Sum('total_price'),
-            price=Sum('total_price') / Sum('quantity')
+            total_price=Sum('total_price') / Sum('quantity')
         )
         .order_by('-date')
     )
