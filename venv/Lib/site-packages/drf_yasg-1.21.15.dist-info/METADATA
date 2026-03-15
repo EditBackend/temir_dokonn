@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: drf-yasg
-Version: 1.21.14
+Version: 1.21.15
 Summary: Automated generation of real Swagger/OpenAPI 2.0 schemas from Django Rest Framework code.
 Author-email: "Cristi V." <cristi@cvjd.me>
 License-Expression: BSD-3-Clause
