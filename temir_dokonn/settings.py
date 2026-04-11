@@ -49,7 +49,6 @@ INSTALLED_APPS = [
     'drf_yasg',
 
     'api',
-    'ai',
 ]
 
 
