@@ -37,10 +37,13 @@ from .views import (
     credit_aging,
     credit_summary,
     recent_payments,
-    debtor_detail, ProductsTableView,
+    debtor_detail,
+    ProductsTableView,
+    abc_analysis,
+    abc_xyz_analysis,
 )
 
-# 🔥 ROUTER
+#  ROUTER
 router = DefaultRouter()
 router.register(r'dashboard', DashboardViewSet, basename='dashboard')
 
@@ -209,7 +212,11 @@ urlpatterns = [
     #top products alohida oyna
     path('top-products/', TopProductsView.as_view()),
     path('products-table/', ProductsTableView.as_view()),
+
+    # abc analiz
+    path('abc-analysis/', abc_analysis),
+    path('abc-xyz-analysis/', abc_xyz_analysis),
 ]
 
-# 🔥 MUHIM
+#  MUHIM
 urlpatterns += router.urls

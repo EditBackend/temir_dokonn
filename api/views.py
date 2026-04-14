@@ -15,10 +15,12 @@ from django.utils import timezone
 from rest_framework.views import APIView
 from .models import ExpenseCategory, Payment, SaleItem
 from .serializers import ExpenseCategorySerializer
+from .utils import send_telegram_message
+import statistics
 
 
 from .models import Product, Sale, Category, Supplier, WarehouseIncome, Customer, Employee, Role, ActivityLog, Batch, \
-    Expense
+    Expense,SaleItem
 from .serializers import (
     ExpenseCreateSerializer,
     ProductSerializer,
@@ -51,6 +53,141 @@ from .serializers import (
 #     serializer_class = EmployeeSerializer
 #     # permission_classes = [IsBossOnly]
 
+# ABC, XYZ analiz
+@api_view(['GET'])
+def abc_analysis(request):
+    data = (
+        SaleItem.objects
+        .values('product__name')
+        .annotate(total=Sum(F('price') * F('quantity')))
+        .order_by('-total')
+    )
+
+    total_sum = sum(item['total'] or 0 for item in data)
+
+    if total_sum == 0:
+        return Response([])
+
+    result = []
+    cumulative = 0
+
+    for item in data:
+        total = item['total'] or 0
+        percent = (total / total_sum) * 100
+        cumulative += percent
+
+        if cumulative <= 80:
+            category = 'A'
+        elif cumulative <= 95:
+            category = 'B'
+        else:
+            category = 'C'
+
+        result.append({
+            "product": item['product__name'],
+            "total": total,
+            "percent": round(float(percent), 2),
+            "category": category
+        })
+
+    return Response(result)
+
+
+@api_view(['GET'])
+def abc_xyz_analysis(request):
+    # ===== PRODUCT TOTAL =====
+    products = (
+        SaleItem.objects
+        .values('product__id', 'product__name')
+        .annotate(total=Sum(F('price') * F('quantity')))
+        .order_by('-total')
+    )
+
+    total_sum = sum(p['total'] or 0 for p in products)
+
+    if total_sum == 0:
+        return Response({"success": True, "data": {}})
+
+    result = []
+    cumulative = 0
+
+    category_totals = {"A": 0, "B": 0, "C": 0}
+    xyz_counts = {"X": 0, "Y": 0, "Z": 0}
+
+    for p in products:
+        product_id = p['product__id']
+        name = p['product__name']
+        total = p['total'] or 0
+
+        # ===== ABC =====
+        percent = (total / total_sum) * 100
+        cumulative += percent
+
+        if cumulative <= 80:
+            abc = 'A'
+        elif cumulative <= 95:
+            abc = 'B'
+        else:
+            abc = 'C'
+
+        category_totals[abc] += total
+
+        # ===== XYZ (daily stability) =====
+        daily_sales = (
+            SaleItem.objects
+            .filter(product_id=product_id)
+            .annotate(date=TruncDate('sale__created_at'))
+            .values('date')
+            .annotate(total_day=Sum(F('price') * F('quantity')))
+            .order_by('date')
+        )
+
+        values = [d['total_day'] for d in daily_sales if d['total_day']]
+
+        if len(values) <= 1:
+            variation = 0
+        else:
+            mean = sum(values) / len(values)
+            std_dev = statistics.stdev(values)
+            variation = (std_dev / mean) if mean else 0
+
+        # ===== XYZ CLASS =====
+        if variation <= 0.1:
+            xyz = 'X'
+        elif variation <= 0.25:
+            xyz = 'Y'
+        else:
+            xyz = 'Z'
+
+        xyz_counts[xyz] += 1
+
+        result.append({
+            "product": name,
+            "total": total,
+            "percent": round(float(percent), 2),
+            "cumulative_percent": round(float(cumulative), 2),
+            "abc": abc,
+            "xyz": xyz,
+            "class": f"{abc}{xyz}"
+        })
+
+    # ===== CATEGORY SUMMARY =====
+    categories = {}
+    for k, v in category_totals.items():
+        categories[k] = {
+            "total": v,
+            "percent": round((v / total_sum) * 100, 2)
+        }
+
+    return Response({
+        "success": True,
+        "data": {
+            "total_sum": total_sum,
+            "categories": categories,
+            "xyz_summary": xyz_counts,
+            "items": result
+        }
+    })
 
 class ExpenseAnalyticsView(APIView):
     def get(self, request):
@@ -352,13 +489,27 @@ class SaleViewSet(ModelViewSet):
             employee_id=request.data.get("employee"),
             action=f"Sotuv amalga oshirdi (chek {new_check_number})"
         )
-
         serializer = self.get_serializer(created_sales, many=True)
+
+        # TELEGRAMGA YUBORISH
+        message = f"🛒 YANGI SAVDO!\n\n🧾 Chek: {new_check_number}\n\n"
+        total_sum = 0
+        for sale in created_sales:
+            total = float(sale.price) * float(sale.quantity)
+            total_sum += total
+            message += f"📦 {sale.product.name}\n"
+            message += f"⚖️ {sale.quantity} x {sale.price} = {total}\n\n"
+        message += f"💰 Jami: {total_sum} so'm"
+        send_telegram_message(message)
+
 
         return Response({
             "check_number": new_check_number,
             "sales": serializer.data
         }, status=201)
+
+
+
 # HISOBOT
 @api_view(['GET'])
 def sales_summary(request):
@@ -591,16 +742,11 @@ def income_check_details(request, check_number=None):
             })
 
         return Response(result)
-
     incomes = WarehouseIncome.objects.filter(check_number=check_number)
-
     if not incomes.exists():
         return Response({"error": "Kirim chek topilmadi"}, status=404)
-
     total = incomes.aggregate(total_sum=Sum('quantity'))
-
     products = []
-
     for income in incomes:
         products.append({
             "product": income.product.name,
@@ -621,12 +767,9 @@ def income_check_details(request, check_number=None):
 # real foydani hisoblash uchun api
 @api_view(['GET'])
 def real_profit(request):
-
     sana_from = request.query_params.get('sana_from')
     sana_to = request.query_params.get('sana_to')
-
     sales = Sale.objects.all()
-
     if sana_from and sana_to:
         sales = sales.filter(
             created_at__date__range=[
@@ -634,26 +777,19 @@ def real_profit(request):
                 parse_date(sana_to)
             ]
         )
-
     total_sales = 0
     total_cost = 0
     total_profit = 0
-
     for sale in sales:
-
         if not sale.product:
             continue
-
         sale_sum = sale.total_price
-
         # FIFO bo‘yicha kirim narxi
         if sale.batch:
             cost_sum = sale.batch.unit_cost * sale.quantity
         else:
             cost_sum = sale.product.last_price * sale.quantity
-
         profit = sale_sum - cost_sum
-
         total_sales += sale_sum
         total_cost += cost_sum
         total_profit += profit
@@ -1251,7 +1387,6 @@ def debtor_detail(request, customer_id):
     recent_payments = Payment.objects.filter(
         customer=customer
     ).order_by('-date')[:5]
-
     return Response({
         "success": True,
         "data": {
@@ -1262,7 +1397,6 @@ def debtor_detail(request, customer_id):
             },
             "total_credit": total_credit,
             "overdue_credit": overdue_credit,
-
             "recent_sales": [
                 {
                     "id": s.id,
@@ -1271,7 +1405,6 @@ def debtor_detail(request, customer_id):
                 }
                 for s in recent_sales
             ],
-
             "recent_payments": [
                 {
                     "id": p.id,
