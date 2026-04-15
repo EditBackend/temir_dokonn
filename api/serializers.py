@@ -155,7 +155,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
 class ExpenseCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Expense
-        fields = ['date', 'category', 'amount', 'payment_type', 'note', 'branch']
+        fields = ['date', 'category', 'amount', 'payment_type', 'note',]
 
     def validate_amount(self, value):
         if value <= 0:

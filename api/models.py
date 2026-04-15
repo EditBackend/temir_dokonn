@@ -30,13 +30,9 @@ class Expense(models.Model):
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     payment_type = models.CharField(max_length=20, choices=PAYMENT_TYPES)
     note = models.TextField(blank=True, null=True)
-    branch = models.ForeignKey('api.Branch', on_delete=models.CASCADE)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
-
     is_deleted = models.BooleanField(default=False)  # soft delete
     created_at = models.DateTimeField(auto_now_add=True)
-
-
 
 
 class Role(models.Model):

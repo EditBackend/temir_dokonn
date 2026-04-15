@@ -260,7 +260,6 @@ class ExpenseViewSet(ModelViewSet):
         return ExpenseCreateSerializer
 
 #boshliq uchun expences oynasi
-
 class ExpenseViewSet(ModelViewSet):
     queryset = Expense.objects.filter(is_deleted=False).select_related('category', 'created_by')
 
@@ -307,13 +306,25 @@ class ExpenseCategoryList(APIView):
             "success": True,
             "data": serializer.data
         })
+    def post(self, request):
+        # Kelgan ma'lumotni serializerga uzatamiz
+        serializer = ExpenseCategorySerializer(data=request.data)
+        # Ma'lumotlar to'g'riligini tekshiramiz
+        if serializer.is_valid():
+            serializer.save()  # Bazaga saqlaymiz
+            return Response({
+                "success": True,
+                "data": serializer.data
+            }, status=201)
+        return Response({
+            "success": False,
+            "errors": serializer.errors
+        }, status=400)
 
 
 class BatchViewSet(viewsets.ModelViewSet):
-
     queryset = Batch.objects.all().order_by('-received_date')
     serializer_class = BatchSerializer
-
     # Sotuvni qayd qilish (qty_left kamayadi)
     @action(detail=True, methods=['post'])
     def sell(self, request, pk=None):
