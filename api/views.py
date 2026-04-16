@@ -54,6 +54,7 @@ from .serializers import (
 #     # permission_classes = [IsBossOnly]
 
 # ABC, XYZ analiz
+
 @api_view(['GET'])
 def abc_analysis(request):
     data = (
@@ -62,9 +63,7 @@ def abc_analysis(request):
         .annotate(total=Sum(F('price') * F('quantity')))
         .order_by('-total')
     )
-
     total_sum = sum(item['total'] or 0 for item in data)
-
     if total_sum == 0:
         return Response([])
 
@@ -102,15 +101,11 @@ def abc_xyz_analysis(request):
         .annotate(total=Sum(F('price') * F('quantity')))
         .order_by('-total')
     )
-
     total_sum = sum(p['total'] or 0 for p in products)
-
     if total_sum == 0:
         return Response({"success": True, "data": {}})
-
     result = []
     cumulative = 0
-
     category_totals = {"A": 0, "B": 0, "C": 0}
     xyz_counts = {"X": 0, "Y": 0, "Z": 0}
 
@@ -118,7 +113,6 @@ def abc_xyz_analysis(request):
         product_id = p['product__id']
         name = p['product__name']
         total = p['total'] or 0
-
         # ===== ABC =====
         percent = (total / total_sum) * 100
         cumulative += percent
@@ -188,6 +182,8 @@ def abc_xyz_analysis(request):
             "items": result
         }
     })
+
+
 
 class ExpenseAnalyticsView(APIView):
     def get(self, request):
@@ -1326,38 +1322,34 @@ def credit_aging(request):
 
 
 
+from .utils import update_customer_score, calculate_credit_limit
+
 @api_view(['GET'])
 def debtors_list(request):
     customers = Customer.objects.all()
     result = []
     for c in customers:
+        update_customer_score(c)  # ballni yangilaymiz
         sales = Sale.objects.filter(customer=c, payment_type='Nasiya')
         total_credit = sales.aggregate(total=Sum('total_price'))['total'] or 0
-        overdue_date = timezone.now() - timedelta(days=30)
-        overdue_credit = sales.filter(
-            created_at__lt=overdue_date
-        ).aggregate(total=Sum('total_price'))['total'] or 0
-        last_payment = Payment.objects.filter(customer=c).order_by('-date').first()
-        status = "normal"
-        if overdue_credit > 0:
-            status = "danger"
-        elif total_credit > 0:
-            status = "warning"
         if total_credit > 0:
+            credit_limit = calculate_credit_limit(c)
+
             result.append({
                 "customer_id": c.id,
-                "customer_name": f"{c.first_name} {c.last_name}",
-                "phone": c.phone,
+                "name": f"{c.first_name} {c.last_name}",
+                "score": c.score,  #  yangi
                 "total_credit": total_credit,
-                "overdue_credit": overdue_credit,
-                "last_payment_date": last_payment.date if last_payment else None,
-                "status": status
+                "credit_limit": credit_limit,  #  yangi
+                "status": (
+                    "danger" if c.score <= 3 else
+                    "warning" if c.score <= 6 else
+                    "good"
+                )
             })
-    return Response({
-        "success": True,
-        "count": len(result),
-        "results": result
-    })
+
+    return Response(result)
+
 
 @api_view(['GET'])
 def recent_payments(request):

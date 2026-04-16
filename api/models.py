@@ -128,7 +128,7 @@ class Customer(models.Model):
 
     debt = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     total_debt = models.DecimalField(max_digits=14, decimal_places=2, default=0)
-
+    score = models.IntegerField(default=10)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -391,7 +391,7 @@ class Sale(models.Model):
         null=True,
         blank=True
     )
-
+    due_date = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     employee = models.ForeignKey(
