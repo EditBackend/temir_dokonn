@@ -24,6 +24,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-6#5&%g7@q(-&81^ehb1&m*+x9$+q0@%0+7r6#0b4ad(=zpm_ap'
 DEBUG = True
 
+
 ALLOWED_HOSTS = [
     "temir-dokonn-7.onrender.com",
     "localhost",
@@ -85,17 +86,15 @@ CORS_ALLOW_ALL_ORIGINS = True
 
 CORS_ALLOWED_ORIGINS = [
     "https://temir-dokonn-7.onrender.com",
-]
-
-CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
 
 CSRF_TRUSTED_ORIGINS = [
     "https://temir-dokonn-7.onrender.com",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
 ]
-
 
 # ========================
 # TEMPLATES
