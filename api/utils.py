@@ -22,9 +22,7 @@ from .models import Sale, Payment
 
 def update_customer_score(customer):
     sales = Sale.objects.filter(customer=customer, payment_type='Nasiya')
-
     score = 10
-
     for sale in sales:
         if sale.due_date:
             if timezone.now() > sale.due_date:

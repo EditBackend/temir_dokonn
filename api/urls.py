@@ -47,7 +47,7 @@ from .views import (
 router = DefaultRouter()
 router.register(r'dashboard', DashboardViewSet, basename='dashboard')
 
-# 🔹 Expense ViewSet mapping
+#  Expense ViewSet
 expense_list = ExpenseViewSet.as_view({
     'get': 'list',
     'post': 'create'
@@ -157,7 +157,6 @@ urlpatterns = [
         'get': 'list',
         'post': 'create'
     })),
-
     # BATCHES
     path('batches/', BatchViewSet.as_view({
         'get': 'list',
@@ -199,9 +198,8 @@ urlpatterns = [
     path('expenses/<int:pk>/', expense_detail),
     path('expenses/analytics/by-category/', ExpenseAnalyticsView.as_view()),
 
-    # TOP PRODUCTS (NEW ANALYTICS)
+    #TOP PRODUCTS (NEW ANALYTICS)
     path('analytics/top-products/', TopProductsView.as_view()),
-
     #Kredit analitikalari
     path('credits/analytics/summary/', credit_summary),
     path('credits/analytics/aging/', credit_aging),

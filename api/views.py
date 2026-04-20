@@ -1353,9 +1353,7 @@ def debtors_list(request):
 
 @api_view(['GET'])
 def recent_payments(request):
-
     payments = Payment.objects.order_by('-date')[:10]
-
     return Response({
         "success": True,
         "data": [
