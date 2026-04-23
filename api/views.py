@@ -20,8 +20,9 @@ from collections import defaultdict
 
 
 
+
 from .models import Product, Sale, Category, Supplier, WarehouseIncome, Customer, Employee, Role, ActivityLog, Batch, \
-    Expense,SaleItem,ExpenseCategory, Payment, SaleItem
+    Expense,SaleItem,ExpenseCategory, Payment, SaleItem,Product
 from .serializers import (
     ExpenseCreateSerializer,
     ProductSerializer,
@@ -58,51 +59,81 @@ from .serializers import (
 # ABC, XYZ analiz
 
 
-
-
 @api_view(['GET'])
 def abc_xyz_analysis_optimized(request):
-    # 1. Davrni belgilash (masalan, oxirgi 12 hafta)
-    # Bu XYZ dagi "0" kunlar/haftalar muammosini hal qilish uchun kerak
+    # 1. Vaqt oralig'i (oxirgi 12 hafta)
     weeks_count = 12
     end_date = timezone.now()
     start_date = end_date - timedelta(weeks=weeks_count)
-
-    # 2. Barcha sotuvlarni bitta so'rovda olish (N+1 ni oldini olish)
+    # 2. TAVSIYALAR LUG'ATI
+    RECOMMENDATIONS = {
+        "AX": "Asosiy kassa generatori. Doimiy zaxira va avtomatlashtirilgan buyurtma talab etiladi.",
+        "AY": "Mavsumiy kassa generatori. Zaxirani mavsumga qarab rejalashtiring.",
+        "AZ": "Yuqori foyda, lekin kutilmagan talab. Buyurtma asosida ishlash tavsiya etiladi.",
+        "BX": "Barqaror o'rtacha foyda. Zaxirani me'yorda ushlab turing.",
+        "BY": "O'rtacha va o'zgaruvchan talab. Aksiyalar orqali sotuvni oshirish mumkin.",
+        "BZ": "Kutilmagan talab va o'rtacha foyda. Katta zaxira qilmang.",
+        "CX": "Kam foyda, lekin barqaror sotuv. Logistikani optimallashtiring.",
+        "CY": "Kam foyda va o'zgaruvchan talab. Doimiy nazorat shart emas.",
+        "CZ": "O'lik kapital. Likvidatsiya qilish yoki assortimentdan chiqarish tavsiya etiladi."
+    }
+    # 3. Barcha sotuvlarni bitta so'rovda olish (N+1 muammosisiz)
+    # Biz bu yerda product__quantity (ombor) va product__last_price (foyda uchun) ni ham olamiz
     sales_qs = (
         SaleItem.objects
         .filter(sale__created_at__range=[start_date, end_date])
         .annotate(week=TruncWeek('sale__created_at'))
-        .values('product_id', 'product__name', 'week')
-        .annotate(weekly_total=Sum(F('price') * F('quantity')))
+        .values(
+            'product_id',
+            'product__name',
+            'product__quantity',
+            'product__last_price',
+            'week'
+        )
+        .annotate(
+            weekly_revenue=Sum(F('price') * F('quantity')),
+            # Sof foyda = (Sotilgan narx - Oxirgi kirim narxi) * miqdor
+            weekly_profit=Sum((F('price') - F('product__last_price')) * F('quantity'))
+        )
     )
 
-    # 3. Ma'lumotlarni xotirada (RAM) guruhlash
-    product_data = defaultdict(lambda: {"name": "", "weekly_sales": defaultdict(float), "total": 0})
+    # 4. Ma'lumotlarni xotirada guruhlash
+    product_data = defaultdict(lambda: {
+        "name": "",
+        "weekly_sales": defaultdict(float),
+        "total_revenue": 0,
+        "total_profit": 0,
+        "stock": 0
+    })
+
     for entry in sales_qs:
         p_id = entry['product_id']
         product_data[p_id]["name"] = entry['product__name']
-        product_data[p_id]["total"] += entry['weekly_total']
-        # Haftalik savdoni lug'atga yig'amiz
-        product_data[p_id]["weekly_sales"][entry['week']] = float(entry['weekly_total'])
-    # 4. Umumiy summani bazada hisoblash
-    total_sum_data = SaleItem.objects.filter(
-        sale__created_at__range=[start_date, end_date]
-    ).aggregate(total=Sum(F('price') * F('quantity')))
-    total_sum = float(total_sum_data['total'] or 0)
-    if total_sum == 0:
-        return Response({"success": True, "data": {}})
+        product_data[p_id]["stock"] = float(entry['product__quantity'] or 0)
+        product_data[p_id]["total_revenue"] += float(entry['weekly_revenue'] or 0)
+        product_data[p_id]["total_profit"] += float(entry['weekly_profit'] or 0)
+        product_data[p_id]["weekly_sales"][entry['week']] = float(entry['weekly_revenue'] or 0)
+
+    # Umumiy aylanma (ABC dagi foizni hisoblash uchun)
+    total_revenue_sum = sum(p["total_revenue"] for p in product_data.values())
+
+    if total_revenue_sum == 0:
+        return Response({"success": True, "message": "Sotuvlar topilmadi", "data": {}})
+
     # 5. ABC va XYZ hisoblash
-    # Avval mahsulotlarni summasi bo'yicha kamayish tartibida saralaymiz
-    sorted_products = sorted(product_data.items(), key=lambda x: x[1]['total'], reverse=True)
+    # Mahsulotlarni aylanma bo'yicha saralaymiz
+    sorted_products = sorted(product_data.items(), key=lambda x: x[1]['total_revenue'], reverse=True)
+
     result = []
     cumulative_percent = 0
-    category_totals = {"A": 0, "B": 0, "C": 0}
     xyz_counts = {"X": 0, "Y": 0, "Z": 0}
+    category_counts = {"A": 0, "B": 0, "C": 0}
+
     for p_id, p_info in sorted_products:
-        total = float(p_info['total'])
-        # --- ABC Hisoblash ---
-        percent = (total / total_sum) * 100
+        revenue = p_info['total_revenue']
+
+        # --- ABC Klass ---
+        percent = (revenue / total_revenue_sum) * 100
         cumulative_percent += percent
         if cumulative_percent <= 80:
             abc = 'A'
@@ -110,55 +141,59 @@ def abc_xyz_analysis_optimized(request):
             abc = 'B'
         else:
             abc = 'C'
-        category_totals[abc] += total
-        # --- XYZ Hisoblash (Haftalik barqarorlik) ---
-        # Sotuv bo'lmagan haftalarga 0 qo'shish (Domla aytgan 2-muammo yechimi)
+        category_counts[abc] += 1
+
+        # --- XYZ Klass (Barqarorlik) ---
         sales_values = []
-        curr_date = start_date
-        while curr_date <= end_date:
-            # Haftaning boshlanish sanasini kalit sifatida olamiz
-            week_key = curr_date.date()  # TruncWeek natijasiga moslash kerak
-            # Eslatma: Haqiqiy loyihada TruncWeek natijasi bilan solishtirish aniqroq bo'lishi kerak
-            # Bu yerda soddalashtirildi:
-            sales_values.append(p_info["weekly_sales"].get(curr_date, 0))
-            curr_date += timedelta(weeks=1)
-        # Variatsiya koeffitsienti
+        temp_date = start_date
+        while temp_date <= end_date:
+            # Haftalik savdolarni ro'yxatga yig'amiz (sotuv bo'lmasa 0 qo'yamiz)
+            val = p_info["weekly_sales"].get(temp_date, 0)
+            sales_values.append(val)
+            temp_date += timedelta(weeks=1)
+
         if len(sales_values) > 1:
             mean = sum(sales_values) / len(sales_values)
             if mean > 0:
                 std_dev = statistics.stdev(sales_values)
                 variation = std_dev / mean
             else:
-                variation = 1.0  # Savdo bo'lmagan bo'lsa, beqaror (Z)
+                variation = 1.0  # Hech narsa sotilmagan bo'lsa barqaror emas
         else:
             variation = 0
-        # XYZ Klassifikatsiyasi
-        if variation <= 0.15:  # X (Barqaror)
+
+        if variation <= 0.15:
             xyz = 'X'
-        elif variation <= 0.3:  # Y (O'rtacha)
+        elif variation <= 0.3:
             xyz = 'Y'
-        else:  # Z (Beqaror)
+        else:
             xyz = 'Z'
         xyz_counts[xyz] += 1
+
+        # Natijani shakllantirish
+        item_class = f"{abc}{xyz}"
         result.append({
             "product": p_info["name"],
-            "total": round(total, 2),
-            "percent": round(percent, 2),
+            "toifa": item_class,
+            "ombor": p_info["stock"],
+            "aylanma": round(revenue, 2),
+            "sof_foyda": round(p_info["total_profit"], 2),
             "abc": abc,
             "xyz": xyz,
-            "class": f"{abc}{xyz}"
+            "recommendation": RECOMMENDATIONS.get(item_class, "Tahlil yetarli emas.")
         })
+
     return Response({
         "success": True,
         "data": {
-            "total_sum": round(total_sum, 2),
-            "categories": category_totals,
-            "xyz_summary": xyz_counts,
+            "total_revenue": round(total_revenue_sum, 2),
+            "summary": {
+                "abc": category_counts,
+                "xyz": xyz_counts
+            },
             "items": result
         }
     })
-
-
 class ExpenseAnalyticsView(APIView):
     def get(self, request):
         data = (
