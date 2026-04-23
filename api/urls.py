@@ -39,8 +39,7 @@ from .views import (
     recent_payments,
     debtor_detail,
     ProductsTableView,
-    abc_analysis,
-    abc_xyz_analysis,
+    abc_xyz_analysis_optimized,
 )
 
 #  ROUTER
@@ -212,8 +211,7 @@ urlpatterns = [
     path('products-table/', ProductsTableView.as_view()),
 
     # abc analiz
-    path('abc-analysis/', abc_analysis),
-    path('abc-xyz-analysis/', abc_xyz_analysis),
+    path('abc-xyz-analysis/', abc_xyz_analysis_optimized),
 ]
 
 #  MUHIM

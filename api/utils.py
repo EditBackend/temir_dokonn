@@ -1,4 +1,7 @@
 import requests
+from django.utils import timezone
+from django.db.models import Sum
+from .models import Sale, Payment
 
 BOT_TOKEN = "8289664382:AAEopZRtaLDyQlHphfNozu-c25koBd9SMwI"
 CHAT_ID = "8235903420"
@@ -15,9 +18,6 @@ def send_telegram_message(text):
     requests.post(url, data=data)
 
 
-from django.utils import timezone
-from django.db.models import Sum
-from .models import Sale, Payment
 
 
 def update_customer_score(customer):

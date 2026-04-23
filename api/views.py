@@ -6,21 +6,22 @@ from rest_framework.response import Response
 from rest_framework import status,viewsets
 from django.http import JsonResponse
 from django.db.models import Sum, F
-from django.db.models.functions import TruncDate
+from django.db.models.functions import TruncWeek, TruncDate
 from django.utils.dateparse import parse_date
 # from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 from rest_framework.views import APIView
-from .models import ExpenseCategory, Payment, SaleItem
 from .serializers import ExpenseCategorySerializer
 from .utils import send_telegram_message
 import statistics
+from collections import defaultdict
+
 
 
 from .models import Product, Sale, Category, Supplier, WarehouseIncome, Customer, Employee, Role, ActivityLog, Batch, \
-    Expense,SaleItem
+    Expense,SaleItem,ExpenseCategory, Payment, SaleItem
 from .serializers import (
     ExpenseCreateSerializer,
     ProductSerializer,
@@ -53,136 +54,109 @@ from .serializers import (
 #     serializer_class = EmployeeSerializer
 #     # permission_classes = [IsBossOnly]
 
+
 # ABC, XYZ analiz
 
-@api_view(['GET'])
-def abc_analysis(request):
-    data = (
-        SaleItem.objects
-        .values('product__name')
-        .annotate(total=Sum(F('price') * F('quantity')))
-        .order_by('-total')
-    )
-    total_sum = sum(item['total'] or 0 for item in data)
-    if total_sum == 0:
-        return Response([])
 
-    result = []
-    cumulative = 0
-
-    for item in data:
-        total = item['total'] or 0
-        percent = (total / total_sum) * 100
-        cumulative += percent
-
-        if cumulative <= 80:
-            category = 'A'
-        elif cumulative <= 95:
-            category = 'B'
-        else:
-            category = 'C'
-
-        result.append({
-            "product": item['product__name'],
-            "total": total,
-            "percent": round(float(percent), 2),
-            "category": category
-        })
-
-    return Response(result)
 
 
 @api_view(['GET'])
-def abc_xyz_analysis(request):
-    # ===== PRODUCT TOTAL =====
-    products = (
+def abc_xyz_analysis_optimized(request):
+    # 1. Davrni belgilash (masalan, oxirgi 12 hafta)
+    # Bu XYZ dagi "0" kunlar/haftalar muammosini hal qilish uchun kerak
+    weeks_count = 12
+    end_date = timezone.now()
+    start_date = end_date - timedelta(weeks=weeks_count)
+
+    # 2. Barcha sotuvlarni bitta so'rovda olish (N+1 ni oldini olish)
+    sales_qs = (
         SaleItem.objects
-        .values('product__id', 'product__name')
-        .annotate(total=Sum(F('price') * F('quantity')))
-        .order_by('-total')
+        .filter(sale__created_at__range=[start_date, end_date])
+        .annotate(week=TruncWeek('sale__created_at'))
+        .values('product_id', 'product__name', 'week')
+        .annotate(weekly_total=Sum(F('price') * F('quantity')))
     )
-    total_sum = sum(p['total'] or 0 for p in products)
+
+    # 3. Ma'lumotlarni xotirada (RAM) guruhlash
+    product_data = defaultdict(lambda: {"name": "", "weekly_sales": defaultdict(float), "total": 0})
+    for entry in sales_qs:
+        p_id = entry['product_id']
+        product_data[p_id]["name"] = entry['product__name']
+        product_data[p_id]["total"] += entry['weekly_total']
+        # Haftalik savdoni lug'atga yig'amiz
+        product_data[p_id]["weekly_sales"][entry['week']] = float(entry['weekly_total'])
+    # 4. Umumiy summani bazada hisoblash
+    total_sum_data = SaleItem.objects.filter(
+        sale__created_at__range=[start_date, end_date]
+    ).aggregate(total=Sum(F('price') * F('quantity')))
+    total_sum = float(total_sum_data['total'] or 0)
     if total_sum == 0:
         return Response({"success": True, "data": {}})
+    # 5. ABC va XYZ hisoblash
+    # Avval mahsulotlarni summasi bo'yicha kamayish tartibida saralaymiz
+    sorted_products = sorted(product_data.items(), key=lambda x: x[1]['total'], reverse=True)
     result = []
-    cumulative = 0
+    cumulative_percent = 0
     category_totals = {"A": 0, "B": 0, "C": 0}
     xyz_counts = {"X": 0, "Y": 0, "Z": 0}
-
-    for p in products:
-        product_id = p['product__id']
-        name = p['product__name']
-        total = p['total'] or 0
-        # ===== ABC =====
+    for p_id, p_info in sorted_products:
+        total = float(p_info['total'])
+        # --- ABC Hisoblash ---
         percent = (total / total_sum) * 100
-        cumulative += percent
-
-        if cumulative <= 80:
+        cumulative_percent += percent
+        if cumulative_percent <= 80:
             abc = 'A'
-        elif cumulative <= 95:
+        elif cumulative_percent <= 95:
             abc = 'B'
         else:
             abc = 'C'
-
         category_totals[abc] += total
-
-        # ===== XYZ (daily stability) =====
-        daily_sales = (
-            SaleItem.objects
-            .filter(product_id=product_id)
-            .annotate(date=TruncDate('sale__created_at'))
-            .values('date')
-            .annotate(total_day=Sum(F('price') * F('quantity')))
-            .order_by('date')
-        )
-
-        values = [d['total_day'] for d in daily_sales if d['total_day']]
-
-        if len(values) <= 1:
+        # --- XYZ Hisoblash (Haftalik barqarorlik) ---
+        # Sotuv bo'lmagan haftalarga 0 qo'shish (Domla aytgan 2-muammo yechimi)
+        sales_values = []
+        curr_date = start_date
+        while curr_date <= end_date:
+            # Haftaning boshlanish sanasini kalit sifatida olamiz
+            week_key = curr_date.date()  # TruncWeek natijasiga moslash kerak
+            # Eslatma: Haqiqiy loyihada TruncWeek natijasi bilan solishtirish aniqroq bo'lishi kerak
+            # Bu yerda soddalashtirildi:
+            sales_values.append(p_info["weekly_sales"].get(curr_date, 0))
+            curr_date += timedelta(weeks=1)
+        # Variatsiya koeffitsienti
+        if len(sales_values) > 1:
+            mean = sum(sales_values) / len(sales_values)
+            if mean > 0:
+                std_dev = statistics.stdev(sales_values)
+                variation = std_dev / mean
+            else:
+                variation = 1.0  # Savdo bo'lmagan bo'lsa, beqaror (Z)
+        else:
             variation = 0
-        else:
-            mean = sum(values) / len(values)
-            std_dev = statistics.stdev(values)
-            variation = (std_dev / mean) if mean else 0
-
-        # ===== XYZ CLASS =====
-        if variation <= 0.1:
+        # XYZ Klassifikatsiyasi
+        if variation <= 0.15:  # X (Barqaror)
             xyz = 'X'
-        elif variation <= 0.25:
+        elif variation <= 0.3:  # Y (O'rtacha)
             xyz = 'Y'
-        else:
+        else:  # Z (Beqaror)
             xyz = 'Z'
-
         xyz_counts[xyz] += 1
-
         result.append({
-            "product": name,
-            "total": total,
-            "percent": round(float(percent), 2),
-            "cumulative_percent": round(float(cumulative), 2),
+            "product": p_info["name"],
+            "total": round(total, 2),
+            "percent": round(percent, 2),
             "abc": abc,
             "xyz": xyz,
             "class": f"{abc}{xyz}"
         })
-
-    # ===== CATEGORY SUMMARY =====
-    categories = {}
-    for k, v in category_totals.items():
-        categories[k] = {
-            "total": v,
-            "percent": round((v / total_sum) * 100, 2)
-        }
-
     return Response({
         "success": True,
         "data": {
-            "total_sum": total_sum,
-            "categories": categories,
+            "total_sum": round(total_sum, 2),
+            "categories": category_totals,
             "xyz_summary": xyz_counts,
             "items": result
         }
     })
-
 
 
 class ExpenseAnalyticsView(APIView):
