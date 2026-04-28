@@ -194,6 +194,10 @@ def abc_xyz_analysis_optimized(request):
             "items": result
         }
     })
+
+
+
+
 class ExpenseAnalyticsView(APIView):
     def get(self, request):
         data = (
@@ -448,9 +452,7 @@ class SaleViewSet(ModelViewSet):
                     {"error": f"{product.name} omborda yetarli emas"},
                     status=400
                 )
-
             remaining_qty = quantity
-
             # FIFO batchlarni olish
             batches = Batch.objects.filter(
                 product=product,
@@ -458,7 +460,6 @@ class SaleViewSet(ModelViewSet):
             ).order_by('received_date')
 
             if batches.exists():
-
                 for batch in batches:
 
                     if remaining_qty <= 0:
