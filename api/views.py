@@ -592,24 +592,23 @@ def new_check_number(request):
 
 
 
-#  CHECK raqam boyicha
 
 @api_view(['GET'])
 def check_details(request, check_number=None):
-    if check_number is None:
 
+    if check_number is None:
         checks = Sale.objects.values('check_number').distinct().order_by('-check_number')
         result = []
 
         for check in checks:
-
             number = check['check_number']
             sales = Sale.objects.filter(check_number=number)
 
             total = sales.aggregate(total_sum=Sum('total_price'))
 
-            products = []
+            first_sale = sales.first()  # ✅ bir marta olamiz
 
+            products = []
             for sale in sales:
                 products.append({
                     "product": sale.product.name,
@@ -621,23 +620,24 @@ def check_details(request, check_number=None):
 
             result.append({
                 "check_number": number,
-                "customer": sales.first().customer,
-                "date": sales.first().created_at,
+                "customer": CustomerSerializer(first_sale.customer).data,  # ✅ FIX
+                "date": first_sale.created_at,
                 "total_sum": total['total_sum'],
                 "products": products
             })
 
         return Response(result)
 
+    # 👉 Bitta check uchun
     sales = Sale.objects.filter(check_number=check_number)
 
     if not sales.exists():
         return Response({"error": "Chek topilmadi"}, status=404)
 
     total = sales.aggregate(total_sum=Sum('total_price'))
+    first_sale = sales.first()  # ✅
 
     products = []
-
     for sale in sales:
         products.append({
             "product": sale.product.name,
@@ -649,12 +649,11 @@ def check_details(request, check_number=None):
 
     return Response({
         "check_number": check_number,
-        "customer": sales.first().customer,
-        "date": sales.first().created_at,
+        "customer": CustomerSerializer(first_sale.customer).data,  # ✅ FIX
+        "date": first_sale.created_at,
         "total_sum": total['total_sum'],
         "products": products
     })
-
 
 class SupplierViewSet(ModelViewSet):
     queryset = Supplier.objects.all()

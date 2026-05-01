@@ -53,6 +53,8 @@ class EmployeeSerializer(serializers.ModelSerializer):
         model = Employee
         fields = "__all__"
 
+
+
 class CustomerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Customer
@@ -60,6 +62,8 @@ class CustomerSerializer(serializers.ModelSerializer):
             "id", "first_name", "last_name", "phone",
             "address", "debt", "total_debt", "created_at",
         ]
+
+
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
