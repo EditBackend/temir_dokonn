@@ -448,11 +448,11 @@ class SaleViewSet(ModelViewSet):
                     {"error": f"{product.name} ni {product.price} dan arzon sotib bo‘lmaydi"},
                     status=400
                 )
-            if product.quantity < quantity:
-                return Response(
-                    {"error": f"{product.name} omborda yetarli emas"},
-                    status=400
-                )
+            # if product.quantity < quantity:
+            #     return Response(
+            #         {"error": f"{product.name} omborda yetarli emas"},
+            #         status=400
+            #     )
             remaining_qty = quantity
             # FIFO batchlarni olish
             batches = Batch.objects.filter(
@@ -470,17 +470,17 @@ class SaleViewSet(ModelViewSet):
 
                     batch.qty_left -= deduct_qty
                     batch.save()
-
                     sale = Sale.objects.create(
                         product=product,
                         quantity=deduct_qty,
                         price=price,
-                        customer=customer,
+                        customer_id=customer,  # <--- 'customer' emas, 'customer_id' qildik
                         payment_type=payment_type,
                         check_number=new_check_number,
                         created_at=common_time,
                         batch=batch
                     )
+
 
                     created_sales.append(sale)
 
