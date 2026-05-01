@@ -27,9 +27,9 @@ User = get_user_model()
     #     password = validated_data.pop("password", None)
     #     user = User(**validated_data)
     #     if password:
-    #         user.set_password(password)  # ✅ hash
+    #         user.set_password(password)
     #     else:
-    #         user.set_password("12345678")  # xohlasangiz olib tashlang
+    #         user.set_password("12345678")
     #     user.save()
     #     return user
     #

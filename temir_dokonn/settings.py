@@ -28,7 +28,6 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-
     'corsheaders',  # CORS har doim tepada tursin
     'rest_framework',
     'drf_spectacular',
@@ -52,7 +51,7 @@ MIDDLEWARE = [
 ROOT_URLCONF = 'temir_dokonn.urls'
 
 # ========================
-# CORS / CSRF SOZLAMALARI (TUG'RILANGAN)
+# CORS / CSRF SOZLAMALARI
 # ========================
 CORS_ALLOW_ALL_ORIGINS = True # Test jarayonida hamma narsaga ruxsat beradi
 CORS_ALLOW_CREDENTIALS = True

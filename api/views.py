@@ -17,7 +17,7 @@ from .serializers import ExpenseCategorySerializer
 from .utils import send_telegram_message
 import statistics
 from collections import defaultdict
-
+from decimal import Decimal
 
 
 
@@ -439,8 +439,9 @@ class SaleViewSet(ModelViewSet):
             except Product.DoesNotExist:
                 return Response({"error": "Mahsulot topilmadi"}, status=404)
 
-            quantity = float(item.get("quantity"))
-            price = float(item.get("price"))
+            # item.get dan kelgan qiymatni Decimal ga o'giramiz
+            quantity = Decimal(str(item.get("quantity", 0)))
+            price = Decimal(str(item.get("price", 0)))
             # Xodim arzon sotmasligi uchun tekshiruv
             if price < float(product.price):
                 return Response(
