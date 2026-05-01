@@ -492,7 +492,7 @@ class SaleViewSet(ModelViewSet):
                     product=product,
                     quantity=quantity,
                     price=price,
-                    customer=customer,
+                    customer_id=customer,  # <--- 'customer' emas, 'customer_id' qildik
                     payment_type=payment_type,
                     check_number=new_check_number,
                     created_at=common_time
