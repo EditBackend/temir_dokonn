@@ -443,16 +443,16 @@ class SaleViewSet(ModelViewSet):
             quantity = Decimal(str(item.get("quantity", 0)))
             price = Decimal(str(item.get("price", 0)))
             # Xodim arzon sotmasligi uchun tekshiruv
-            if price < float(product.price):
-                return Response(
-                    {"error": f"{product.name} ni {product.price} dan arzon sotib bo‘lmaydi"},
-                    status=400
-                )
-            # if product.quantity < quantity:
+            # if price < float(product.price):
             #     return Response(
-            #         {"error": f"{product.name} omborda yetarli emas"},
+            #         {"error": f"{product.name} ni {product.price} dan arzon sotib bo‘lmaydi"},
             #         status=400
             #     )
+            if product.quantity < quantity:
+                return Response(
+                    {"error": f"{product.name} omborda yetarli emas"},
+                    status=400
+                )
             remaining_qty = quantity
             # FIFO batchlarni olish
             batches = Batch.objects.filter(
