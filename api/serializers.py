@@ -89,7 +89,11 @@ class SaleSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ('total_price', 'created_at', 'check_number')
 
+
+
 class WarehouseIncomeSerializer(serializers.ModelSerializer):
+    product_name = serializers.ReadOnlyField(source='product.name')
+    supplier_name = serializers.ReadOnlyField(source='supplier.name')
     class Meta:
         model = WarehouseIncome
         fields = "__all__"
