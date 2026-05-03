@@ -22,7 +22,7 @@ from decimal import Decimal
 
 
 from .models import Product, Sale, Category, Supplier, WarehouseIncome, Customer, Employee, Role, ActivityLog, Batch, \
-    Expense,SaleItem,ExpenseCategory, Payment, SaleItem,Product
+    Expense,SaleItem,ExpenseCategory, Payment, SaleItem,Product,Unit
 from .serializers import (
     ExpenseCreateSerializer,
     ProductSerializer,
@@ -33,7 +33,8 @@ from .serializers import (
     CustomerSerializer,
     EmployeeSerializer,
     RoleSerializer,
-    BatchSerializer, ExpenseSerializer, ExpenseCreateSerializer
+    BatchSerializer, ExpenseSerializer, ExpenseCreateSerializer,
+    UnitSerializer
 )
 
 
@@ -56,9 +57,12 @@ from .serializers import (
 #     # permission_classes = [IsBossOnly]
 
 
+class UnitViewSet(viewsets.ModelViewSet):
+    queryset = Unit.objects.all()
+    serializer_class = UnitSerializer
+
+
 # ABC, XYZ analiz
-
-
 @api_view(['GET'])
 def abc_xyz_analysis_optimized(request):
     # 1. Vaqt oralig'i (oxirgi 12 hafta)

@@ -1,5 +1,6 @@
-from django.urls import path
+from django.urls import path,include
 from rest_framework.routers import DefaultRouter
+from .views import UnitViewSet # Buni views.py da yozganmiz
 from .views import (
     ProductViewSet,
     SaleViewSet,
@@ -39,13 +40,13 @@ from .views import (
     recent_payments,
     debtor_detail,
     ProductsTableView,
-    abc_xyz_analysis_optimized,
+    abc_xyz_analysis_optimized, UnitViewSet,
 )
 
 #  ROUTER
 router = DefaultRouter()
 router.register(r'dashboard', DashboardViewSet, basename='dashboard')
-
+router.register(r'units', UnitViewSet) # Bu avtomatik CRUD yo'llarini yaratadi
 #  Expense ViewSet
 expense_list = ExpenseViewSet.as_view({
     'get': 'list',
@@ -60,7 +61,7 @@ expense_detail = ExpenseViewSet.as_view({
 urlpatterns = [
 
     path('', home),
-
+    path('', include(router.urls)),
     # CATEGORY (OLD)
     path('categories/', CategoryViewSet.as_view({
         'get': 'list',

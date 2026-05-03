@@ -46,6 +46,7 @@ class Role(models.Model):
     va hokazo
     """
 
+
     name = models.CharField(max_length=50)
 
     # Har bir rolga ruxsatlar beramiz
@@ -62,12 +63,10 @@ class Role(models.Model):
 class Employee(models.Model):
     """
     Xodim modeli
-
     Telefon bu login
     password bu parol
     role bu lavozim
     """
-
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
 
@@ -120,7 +119,6 @@ class ActivityLog(models.Model):
 
 
 class Customer(models.Model):
-
     first_name = models.CharField(max_length=80)
     last_name = models.CharField(max_length=80)
     phone = models.CharField(max_length=20, unique=True)
@@ -139,6 +137,14 @@ class Customer(models.Model):
 class Category(models.Model):
 
     name = models.CharField(max_length=100)
+
+    def __str__(self):
+        return self.name
+
+# O'lchov birligi uchun
+class Unit(models.Model):
+    name = models.CharField(max_length=50, unique=True, verbose_name="O'lchov birligi nomi")
+    short_name = models.CharField(max_length=10, blank=True, null=True, verbose_name="Qisqartma nomi") # masalan: kg, l
 
     def __str__(self):
         return self.name
@@ -166,20 +172,14 @@ class Product(models.Model):
         blank=True
     )
 
-    STATUS_CHOICES = (
-        ('dona', 'dona'),
-        ('kg', 'kg'),
-        ('metr', 'metr'),
-        ('litr', 'litr'),
-        ('m2', 'm2'),
-        ('m3', 'm3'),
+    unit = models.ForeignKey(
+        Unit,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="products"
     )
 
-    unity = models.CharField(
-        max_length=10,
-        choices=STATUS_CHOICES,
-        default='dona'
-    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

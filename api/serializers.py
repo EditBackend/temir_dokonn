@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import Product, Sale, Category, Supplier, WarehouseIncome, Customer, Role, Employee, Batch, Expense, \
-    ExpenseCategory
+    ExpenseCategory,Unit
 
 User = get_user_model()
 
@@ -42,11 +42,17 @@ User = get_user_model()
     #     instance.save()
     #     return instance
 
+class UnitSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Unit
+        fields = '__all__'
+
 
 class RoleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Role
         fields = "__all__"
+
 
 class EmployeeSerializer(serializers.ModelSerializer):
     class Meta:
