@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import Product, Sale, Category, Supplier, WarehouseIncome, Customer, Role, Employee, Batch, Expense, \
-    ExpenseCategory,Unit
+    ExpenseCategory,Unit,Sale
 
 User = get_user_model()
 
@@ -90,16 +90,16 @@ class ProductSerializer(serializers.ModelSerializer):
         model = Product
         fields = '__all__' # Bu barcha fieldlarni, plyus yuqoridagi 'supplier_name'ni ham chiqaradi
 
+
+
 class SaleSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)
-    payment_type_name = serializers.CharField(source='payment_type.name', read_only=True)
+    customer_name = serializers.CharField(source='customer.__str__', read_only=True)
 
     class Meta:
         model = Sale
         fields = '__all__'
-        read_only_fields = ('total_price', 'created_at', 'check_number')
-
-
+        read_only_fields = ('total_price', 'created_at', 'check_number', 'product_name', 'customer_name')
 
 class WarehouseIncomeSerializer(serializers.ModelSerializer):
     product_name = serializers.ReadOnlyField(source='product.name')

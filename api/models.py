@@ -1,6 +1,6 @@
 from django.db import models
 from django.contrib.auth import get_user_model
-
+from django.utils import timezone
 User = get_user_model()
 class Branch(models.Model):
     name = models.CharField(max_length=100)  # filial nomi
@@ -128,7 +128,7 @@ class Customer(models.Model):
     total_debt = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     score = models.IntegerField(default=10)
     created_at = models.DateTimeField(auto_now_add=True)
-
+    updated_at = models.DateTimeField(auto_now=True)  # Har safar save() bo'lganda yangilanadi
     def __str__(self):
         return f"{self.first_name} {self.last_name} ({self.phone})"
 
@@ -145,6 +145,12 @@ class Category(models.Model):
 class Unit(models.Model):
     name = models.CharField(max_length=50, unique=True, verbose_name="O'lchov birligi nomi")
     short_name = models.CharField(max_length=10, blank=True, null=True, verbose_name="Qisqartma nomi") # masalan: kg, l
+
+    def __str__(self):
+        return self.name
+
+class PaymentType(models.Model):
+    name = models.CharField(max_length=50, unique=True, verbose_name="To'lov turi nomi")
 
     def __str__(self):
         return self.name
@@ -217,12 +223,7 @@ class Supplier(models.Model):
 
 
 class WarehouseIncome(models.Model):
-
-    PAYMENT_TYPES = (
-        ('Naqd', 'Naqd'),
-        ('Karta', 'Karta'),
-        ('Nasiya', 'Nasiya'),
-    )
+    # PAYMENT_TYPES (tuple) qismini o'chirib tashlaymiz, chunki endi dinamik bo'ladi
 
     product = models.ForeignKey(
         Product,
@@ -240,35 +241,20 @@ class WarehouseIncome(models.Model):
         related_name='warehouse_incomes'
     )
 
-    quantity = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        default=0
-    )
+    quantity = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
-    price = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        default=0
-    )
-
-    payment_type = models.CharField(
-        max_length=20,
-        choices=PAYMENT_TYPES,
-        default='Naqd'
-    )
-
-    total_price = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        default=0
-    )
-
-    check_number = models.IntegerField(
+    # BU YER O'ZGARDI: CharField o'rniga ForeignKey
+    payment_type = models.ForeignKey(
+        PaymentType,
+        on_delete=models.PROTECT,  # SET_PROTECT emas, shunchaki PROTECT
         null=True,
-        blank=True
+        blank=True,
+        related_name='warehouse_incomes'
     )
 
+    total_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    check_number = models.IntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     employee = models.ForeignKey(
@@ -279,18 +265,31 @@ class WarehouseIncome(models.Model):
     )
 
     def save(self, *args, **kwargs):
-
-        # total price hisoblash
         self.total_price = (self.quantity or 0) * (self.price or 0)
-
+        is_new = self.pk is None
         super().save(*args, **kwargs)
 
-        # Omborga qo'shish
-        if self.product:
+        # Xarajatga yozish logikasi (Dinamik holatga moslandi)
+        if is_new and self.payment_type:
+            # Nasiyadan boshqa har qanday to'lov turi xarajat hisoblanadi
+            if self.payment_type.name.lower() != 'nasiya':
+                category, _ = ExpenseCategory.objects.get_or_create(name="Ombor kirimi uchun")
 
+                # Expense modelidagi payment_type CharField bo'lgani uchun string beramiz
+                # Agar Expense'dagi payment_type ham dinamik bo'lsa, uni ham o'zgartirish kerak bo'ladi
+                Expense.objects.create(
+                    date=timezone.now().date(),  # created_at o'rniga hozirgi vaqtni beramiz
+                    category=category,
+                    amount=self.total_price,
+                    payment_type='cash',
+                    note=f"Kirim #{self.id}: {self.product.name if self.product else 'Nomsiz'}",
+                    # created_by qismini soddalashtiramiz:
+                    created_by=self.employee.user if self.employee and hasattr(self.employee, 'user') else None
+                )
+        #Ombor qoldig'ini yangilash va FIFO batch yaratish
+        if is_new and self.product:
             if self.product.quantity is None:
                 self.product.quantity = 0
-
             self.product.quantity += self.quantity
             self.product.last_price = self.price
             self.product.save()
@@ -405,8 +404,19 @@ class Sale(models.Model):
         ordering = ['-created_at']
 
     def save(self, *args, **kwargs):
+        # 1. Umumiy summani hisoblash
         self.total_price = (self.quantity or 0) * (self.price or 0)
+        # 2. Mijozning qarzini yangilash (faqat yangi savdo yaratilayotganda)
+        # self.pk bo'lmasa, demak bu yangi rekord
+        if not self.pk and self.payment_type == 'Nasiya' and self.customer:
+            # Mijozning joriy qarzi va umumiy qarzini oshiramiz
+            self.customer.debt += self.total_price
+            self.customer.total_debt += self.total_price
+            # Mijoz modelini saqlash shart, aks holda o'zgarish bazaga kirmaydi
+            self.customer.save()
+        # 3. Asosiy save funksiyasini chaqirish
         super().save(*args, **kwargs)
+
 
     def __str__(self):
         product_name = self.product.name if self.product else "Mahsulot yo'q"
@@ -443,10 +453,27 @@ class PriceHistory(models.Model):
 
 # Crededit analitikalari
 class Payment(models.Model):
-    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name="payments")
+    customer = models.ForeignKey(
+        Customer,
+        on_delete=models.CASCADE,
+        related_name="payments"
+    )
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     date = models.DateField(auto_now_add=True)
+    def save(self, *args, **kwargs):
+        # 1. Faqat yangi to'lov qo'shilayotganda mijoz qarzini kamaytiramiz
+        if not self.pk:
+            if self.customer:
+                # Mijozning joriy qarzidan to'langan summani ayiramiz
+                self.customer.debt -= self.amount
+                # Qarz manfiy bo'lib ketmasligini tekshirish (ixtiyoriy, lekin foydali)
+                # if self.customer.debt < 0:
+                #     self.customer.debt = 0
+
+                self.customer.save()
+
+        # 2. Asosiy save funksiyasini chaqirish
+        super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.customer} - {self.amount}"
-
+        return f"{self.customer} - {self.amount} ({self.date})"

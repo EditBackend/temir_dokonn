@@ -22,7 +22,7 @@ from decimal import Decimal
 
 
 from .models import Product, Sale, Category, Supplier, WarehouseIncome, Customer, Employee, Role, ActivityLog, Batch, \
-    Expense,SaleItem,ExpenseCategory, Payment, SaleItem,Product,Unit
+    Expense, SaleItem, ExpenseCategory, Payment, SaleItem, Product, Unit, PaymentType
 from .serializers import (
     ExpenseCreateSerializer,
     ProductSerializer,
@@ -61,72 +61,64 @@ class UnitViewSet(viewsets.ModelViewSet):
     queryset = Unit.objects.all()
     serializer_class = UnitSerializer
 
-
-# ABC, XYZ analiz
+#abc analiz
 @api_view(['GET'])
 def abc_xyz_analysis_optimized(request):
-    # 1. Vaqt oralig'i (oxirgi 12 hafta)
     weeks_count = 12
     end_date = timezone.now()
-    start_date = end_date - timedelta(weeks=weeks_count)
-    # 2. TAVSIYALAR LUG'ATI
+    # start_date ni haftaning boshiga to'g'rilaymiz
+    start_date = (end_date - timedelta(weeks=weeks_count)).replace(hour=0, minute=0, second=0, microsecond=0)
     RECOMMENDATIONS = {
-        "AX": "Asosiy kassa generatori. Doimiy zaxira va avtomatlashtirilgan buyurtma talab etiladi.",
+        "AX": "Asosiy kassa generatori. Doimiy zaxira talab etiladi.",
         "AY": "Mavsumiy kassa generatori. Zaxirani mavsumga qarab rejalashtiring.",
-        "AZ": "Yuqori foyda, lekin kutilmagan talab. Buyurtma asosida ishlash tavsiya etiladi.",
+        "AZ": "Yuqori foyda, kutilmagan talab. Buyurtma asosida ishlash tavsiya etiladi.",
         "BX": "Barqaror o'rtacha foyda. Zaxirani me'yorda ushlab turing.",
         "BY": "O'rtacha va o'zgaruvchan talab. Aksiyalar orqali sotuvni oshirish mumkin.",
         "BZ": "Kutilmagan talab va o'rtacha foyda. Katta zaxira qilmang.",
-        "CX": "Kam foyda, lekin barqaror sotuv. Logistikani optimallashtiring.",
+        "CX": "Kam foyda, barqaror sotuv. Logistikani optimallashtiring.",
         "CY": "Kam foyda va o'zgaruvchan talab. Doimiy nazorat shart emas.",
-        "CZ": "O'lik kapital. Likvidatsiya qilish yoki assortimentdan chiqarish tavsiya etiladi."
+        "CZ": "O'lik kapital. Assortimentdan chiqarish tavsiya etiladi."
     }
-    # 3. Barcha sotuvlarni bitta so'rovda olish (N+1 muammosisiz)
-    # Biz bu yerda product__quantity (ombor) va product__last_price (foyda uchun) ni ham olamiz
+
+    # Sotuvlarni olish
     sales_qs = (
         SaleItem.objects
         .filter(sale__created_at__range=[start_date, end_date])
-        .annotate(week=TruncWeek('sale__created_at'))
-        .values(
-            'product_id',
-            'product__name',
-            'product__quantity',
-            'product__last_price',
-            'week'
-        )
+        .annotate(week=TruncWeek('sale__created_at'))  # Haftaning boshiga (dushanba) o'giradi
+        .values('product_id', 'product__name', 'product__quantity', 'product__last_price', 'week')
         .annotate(
             weekly_revenue=Sum(F('price') * F('quantity')),
-            # Sof foyda = (Sotilgan narx - Oxirgi kirim narxi) * miqdor
             weekly_profit=Sum((F('price') - F('product__last_price')) * F('quantity'))
         )
     )
 
-    # 4. Ma'lumotlarni xotirada guruhlash
     product_data = defaultdict(lambda: {
-        "name": "",
-        "weekly_sales": defaultdict(float),
-        "total_revenue": 0,
-        "total_profit": 0,
-        "stock": 0
+        "name": "", "weekly_sales": {}, "total_revenue": 0, "total_profit": 0, "stock": 0
     })
 
+    #Ma'lumotlarni yig'ish
     for entry in sales_qs:
         p_id = entry['product_id']
+        # Haftani string ko'rinishida saqlaymiz, solishtirish oson bo'lishi uchun
+        w_str = entry['week'].strftime('%Y-%W')
         product_data[p_id]["name"] = entry['product__name']
         product_data[p_id]["stock"] = float(entry['product__quantity'] or 0)
         product_data[p_id]["total_revenue"] += float(entry['weekly_revenue'] or 0)
         product_data[p_id]["total_profit"] += float(entry['weekly_profit'] or 0)
-        product_data[p_id]["weekly_sales"][entry['week']] = float(entry['weekly_revenue'] or 0)
+        product_data[p_id]["weekly_sales"][w_str] = float(entry['weekly_revenue'] or 0)
 
-    # Umumiy aylanma (ABC dagi foizni hisoblash uchun)
     total_revenue_sum = sum(p["total_revenue"] for p in product_data.values())
-
     if total_revenue_sum == 0:
         return Response({"success": True, "message": "Sotuvlar topilmadi", "data": {}})
 
-    # 5. ABC va XYZ hisoblash
-    # Mahsulotlarni aylanma bo'yicha saralaymiz
+    # ABC va XYZ hisoblash
     sorted_products = sorted(product_data.items(), key=lambda x: x[1]['total_revenue'], reverse=True)
+    # Barcha mavjud haftalar ro'yxatini tuzamiz
+    all_weeks = []
+    curr = start_date
+    while curr <= end_date:
+        all_weeks.append(curr.strftime('%Y-%W'))
+        curr += timedelta(weeks=1)
 
     result = []
     cumulative_percent = 0
@@ -136,45 +128,25 @@ def abc_xyz_analysis_optimized(request):
     for p_id, p_info in sorted_products:
         revenue = p_info['total_revenue']
 
-        # --- ABC Klass ---
+        # --- ABC ---
         percent = (revenue / total_revenue_sum) * 100
         cumulative_percent += percent
-        if cumulative_percent <= 80:
-            abc = 'A'
-        elif cumulative_percent <= 95:
-            abc = 'B'
-        else:
-            abc = 'C'
+        abc = 'A' if cumulative_percent <= 80 else ('B' if cumulative_percent <= 95 else 'C')
         category_counts[abc] += 1
 
-        # --- XYZ Klass (Barqarorlik) ---
-        sales_values = []
-        temp_date = start_date
-        while temp_date <= end_date:
-            # Haftalik savdolarni ro'yxatga yig'amiz (sotuv bo'lmasa 0 qo'yamiz)
-            val = p_info["weekly_sales"].get(temp_date, 0)
-            sales_values.append(val)
-            temp_date += timedelta(weeks=1)
+        # --- XYZ ---
+        sales_values = [p_info["weekly_sales"].get(w, 0) for w in all_weeks]
 
+        variation = 1.0
         if len(sales_values) > 1:
             mean = sum(sales_values) / len(sales_values)
             if mean > 0:
                 std_dev = statistics.stdev(sales_values)
                 variation = std_dev / mean
-            else:
-                variation = 1.0  # Hech narsa sotilmagan bo'lsa barqaror emas
-        else:
-            variation = 0
 
-        if variation <= 0.15:
-            xyz = 'X'
-        elif variation <= 0.3:
-            xyz = 'Y'
-        else:
-            xyz = 'Z'
+        xyz = 'X' if variation <= 0.15 else ('Y' if variation <= 0.3 else 'Z')
         xyz_counts[xyz] += 1
 
-        # Natijani shakllantirish
         item_class = f"{abc}{xyz}"
         result.append({
             "product": p_info["name"],
@@ -184,23 +156,17 @@ def abc_xyz_analysis_optimized(request):
             "sof_foyda": round(p_info["total_profit"], 2),
             "abc": abc,
             "xyz": xyz,
-            "recommendation": RECOMMENDATIONS.get(item_class, "Tahlil yetarli emas.")
+            "recommendation": RECOMMENDATIONS.get(item_class, "")
         })
 
     return Response({
         "success": True,
         "data": {
             "total_revenue": round(total_revenue_sum, 2),
-            "summary": {
-                "abc": category_counts,
-                "xyz": xyz_counts
-            },
+            "summary": {"abc": category_counts, "xyz": xyz_counts},
             "items": result
         }
     })
-
-
-
 
 class ExpenseAnalyticsView(APIView):
     def get(self, request):
@@ -1140,139 +1106,136 @@ def activity_list(request):
 #         },
 #         "categories": categories
 #     })
-class DashboardViewSet(viewsets.ViewSet):
 
+
+
+
+
+class DashboardViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['get'], url_path='summary')
     def summary(self, request):
         sana_from = request.GET.get('date_from')
         sana_to = request.GET.get('date_to')
-
+        p_type_id = request.GET.get('payment_type')
         sales = Sale.objects.all()
-        expenses = WarehouseIncome.objects.all()
-
+        # 1. Omborga kirim xarajatlari
+        warehouse_incomes = WarehouseIncome.objects.all()
+        # 2. Boshqa barcha xarajatlar
+        other_expenses = Expense.objects.filter(is_deleted=False)
+        # Sanaga ko'ra filtr
         if sana_from and sana_to:
             sales = sales.filter(created_at__date__range=[sana_from, sana_to])
-            expenses = expenses.filter(created_at__date__range=[sana_from, sana_to])
-
-        cash = sales.filter(payment_type='Naqd').aggregate(total=Sum('total_price'))['total'] or 0
-        card = sales.filter(payment_type='Karta').aggregate(total=Sum('total_price'))['total'] or 0
-        credit = sales.filter(payment_type='Nasiya').aggregate(total=Sum('total_price'))['total'] or 0
-
-        total_expense = expenses.aggregate(total=Sum('total_price'))['total'] or 0
-
-        net_cash = (cash + card) - total_expense
-
+            warehouse_incomes = warehouse_incomes.filter(created_at__date__range=[sana_from, sana_to])
+            other_expenses = other_expenses.filter(date__range=[sana_from, sana_to])
+        # To'lov turiga ko'ra filtr
+        if p_type_id:
+            sales = sales.filter(payment_type_id=p_type_id)
+            warehouse_incomes = warehouse_incomes.filter(payment_type_id=p_type_id)
+        # HISOB-KITOB:
+        total_sales = sales.aggregate(total=Sum('total_price'))['total'] or 0
+        # Ombor xarajati + Boshqa xarajatlar
+        total_warehouse_cost = warehouse_incomes.aggregate(total=Sum('total_price'))['total'] or 0
+        total_other_cost = other_expenses.aggregate(total=Sum('amount'))['total'] or 0
+        # JAMI CHIQUVCHI PUL
+        total_expense = total_warehouse_cost + total_other_cost
         return Response({
             "success": True,
             "data": {
-                "total_sales": cash + card,
-                "total_expenses": total_expense,
-                "net_cash": net_cash,
-                "credit_sales": credit,
-                "credit_payments": 0
+                "total_sales": total_sales,
+                "total_expenses": total_expense,  # Endi bu yerda hamma xarajat bor
+                "warehouse_cost": total_warehouse_cost,  # Alohida ko'rish uchun
+                "other_cost": total_other_cost,  # Alohida ko'rish uchun
+                "net_cash": total_sales - total_expense
             }
         })
-
     @action(detail=False, methods=['get'], url_path='sales-expenses-trend')
     def trend(self, request):
-
+        # Trendda barcha xarajatlarni ko'rsatish uchun Expense modelini ham qo'shamiz
         sales = Sale.objects.annotate(date=TruncDate('created_at')) \
             .values('date') \
-            .annotate(sales=Sum('total_price'))
-
-        expenses = WarehouseIncome.objects.annotate(date=TruncDate('created_at')) \
+            .annotate(amount=Sum('total_price'))
+        # Ombor xarajatlari
+        w_expenses = WarehouseIncome.objects.annotate(date=TruncDate('created_at')) \
             .values('date') \
-            .annotate(expenses=Sum('total_price'))
-
+            .annotate(amount=Sum('total_price'))
+        # Boshqa xarajatlar
+        o_expenses = Expense.objects.filter(is_deleted=False) \
+            .values('date') \
+            .annotate(amount=Sum('amount'))
         result = {}
-
         for s in sales:
-            result[s['date']] = {
-                "date": s['date'],
-                "sales": s['sales'],
-                "expenses": 0
-            }
-
-        for e in expenses:
-            if e['date'] in result:
-                result[e['date']]['expenses'] = e['expenses']
-            else:
-                result[e['date']] = {
-                    "date": e['date'],
-                    "sales": 0,
-                    "expenses": e['expenses']
-                }
+            d = s['date']
+            result[d] = {"date": d, "sales": float(s['amount']), "expenses": 0}
+        # Xarajatlarni birlashtirish
+        for e in list(w_expenses) + list(o_expenses):
+            d = e['date']
+            if d not in result:
+                result[d] = {"date": d, "sales": 0, "expenses": 0}
+            result[d]['expenses'] += float(e['amount'])
 
         return Response({
             "success": True,
-            "data": list(result.values())
+            "data": sorted(list(result.values()), key=lambda x: x['date'])
         })
 
     @action(detail=False, methods=['get'], url_path='payment-types')
     def payment_types(self, request):
-
+        # To'lov turlari bo'yicha dinamik filtr
         sales = Sale.objects.all()
+        types = PaymentType.objects.all()
+
+        data = []
+        for p_type in types:
+            amount = sales.filter(payment_type=p_type).aggregate(total=Sum('total_price'))['total'] or 0
+            data.append({
+                "type": p_type.name,
+                "amount": amount
+            })
 
         return Response({
             "success": True,
-            "data": [
-                {
-                    "type": "cash",
-                    "amount": sales.filter(payment_type='Naqd').aggregate(Sum('total_price'))['total_price__sum'] or 0
-                },
-                {
-                    "type": "card",
-                    "amount": sales.filter(payment_type='Karta').aggregate(Sum('total_price'))['total_price__sum'] or 0
-                },
-                {
-                    "type": "credit",
-                    "amount": sales.filter(payment_type='Nasiya').aggregate(Sum('total_price'))['total_price__sum'] or 0
-                }
-            ]
+            "data": data
         })
-
     @action(detail=False, methods=['get'], url_path='top-products')
     def top_products(self, request):
-
+        # 1. Filtrlarni olish
+        sana_from = request.GET.get('date_from')
+        sana_to = request.GET.get('date_to')
+        limit = request.GET.get('limit')  # Frontendchi xohlagancha limit qo'yishi mumkin
+        # 2. Asosiy queryset (Sale emas, balki SaleItem dan foydalanish aniqroq natija beradi)
+        # Chunki bir nechta mahsulot bitta sotuvda (Sale) bo'lishi mumkin
+        items = SaleItem.objects.all()
+        # 3. Sana bo'yicha filtrlash
+        if sana_from and sana_to:
+            items = items.filter(sale__created_at__date__range=[sana_from, sana_to])
+        # 4. Guruhlash va hisoblash
         data = (
-            Sale.objects
-            .values('product__id', 'product__name')
+            items.values('product__id', 'product__name')
             .annotate(
-                revenue=Sum('total_price'),
-                qty=Sum('quantity')
+                revenue=Sum(F('price') * F('quantity')),  # Haqiqiy tushum
+                qty=Sum('quantity')  # Sotilgan miqdor
             )
-            .order_by('-revenue')[:5]
+            .order_by('-revenue')  # Eng ko'p pul olib kelganidan boshlab
         )
-
+        # 5. Limit qo'llash
+        if limit:
+            data = data[:int(limit)]
+        else:
+            # Agar limit yuborilmasa, odatda 10-20 ta mahsulot yetarli
+            data = data[:20]
         return Response({
             "success": True,
             "data": [
                 {
                     "product_id": i['product__id'],
                     "product_name": i['product__name'],
-                    "revenue": i['revenue'],
+                    "revenue": round(i['revenue'], 2),
                     "qty": i['qty']
                 } for i in data
             ]
         })
 
-    @action(detail=False, methods=['get'], url_path='recent-activities')
-    def activities(self, request):
-
-        logs = ActivityLog.objects.order_by('-created_at')[:10]
-
-        return Response({
-            "success": True,
-            "data": [
-                {
-                    "text": log.action,
-                    "date": log.created_at
-                } for log in logs
-            ]
-        })
-
 #Kredeti analitikalari
-
 @api_view(['GET'])
 def credit_summary(request):
     # faqat nasiya sotuvlar
