@@ -38,11 +38,11 @@ INSTALLED_APPS = [
 # MIDDLEWARE
 # ========================
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',  # Eng tepada bo'lishi shart
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',  # CSRF himoyasi
+    # 'django.middleware.csrf.CsrfViewMiddleware',  <-- SHU QATORNI KOMMENTGA OLING
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -63,9 +63,9 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 # Brauzer cookielarini ruxsat berish
-CSRF_COOKIE_HTTPONLY = False  # Frontend CSRF tokenni o'qiy olishi uchun
-CSRF_COOKIE_SAMESITE = 'None'  # 'Lax' o'rniga 'None' qiling (Cross-site uchun)
-CSRF_COOKIE_SECURE = True      # HTTPS orqali ishlaganda True bo'lishi shart
+CSRF_COOKIE_HTTPONLY = False
+CSRF_COOKIE_SAMESITE = 'None'
+CSRF_COOKIE_SECURE = True
 SESSION_COOKIE_SECURE = True
 
 # ========================
