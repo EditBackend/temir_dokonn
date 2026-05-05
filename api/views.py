@@ -37,15 +37,33 @@ from .serializers import (
     UnitSerializer
 )
 
-
 class RoleDetailView(APIView):
+    # 1. Bitta rolni olish
+    def get(self, request, pk):
+        try:
+            role = Role.objects.get(pk=pk)
+            serializer = RoleSerializer(role)
+            return Response(serializer.data)
+        except Role.DoesNotExist:
+            return Response({"success": False, "message": "Topilmadi"}, status=status.HTTP_404_NOT_FOUND)
+    def put(self, request, pk):
+        try:
+            role = Role.objects.get(pk=pk)
+            # data=request.data - yangi kelgan ma'lumotlarni modelga bog'laydi
+            serializer = RoleSerializer(role, data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                return Response({"success": True, "data": serializer.data}, status=status.HTTP_200_OK)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Role.DoesNotExist:
+            return Response({"success": False, "message": "Topilmadi"}, status=status.HTTP_404_NOT_FOUND)
     def delete(self, request, pk):
         try:
             role = Role.objects.get(pk=pk)
             role.delete()
             return Response({"success": True, "message": "Rol o'chirildi"}, status=status.HTTP_200_OK)
         except Role.DoesNotExist:
-            return Response({"success": False, "message": "Rol topilmadi"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"success": False, "message": "Topilmadi"}, status=status.HTTP_404_NOT_FOUND)
 # User = get_user_model()
 
 
