@@ -38,6 +38,14 @@ from .serializers import (
 )
 
 
+class RoleDetailView(APIView):
+    def delete(self, request, pk):
+        try:
+            role = Role.objects.get(pk=pk)
+            role.delete()
+            return Response({"success": True, "message": "Rol o'chirildi"}, status=status.HTTP_200_OK)
+        except Role.DoesNotExist:
+            return Response({"success": False, "message": "Rol topilmadi"}, status=status.HTTP_404_NOT_FOUND)
 # User = get_user_model()
 
 

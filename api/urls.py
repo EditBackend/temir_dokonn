@@ -1,6 +1,6 @@
 from django.urls import path,include
 from rest_framework.routers import DefaultRouter
-from .views import UnitViewSet # Buni views.py da yozganmiz
+from .views import UnitViewSet, RoleDetailView  # Buni views.py da yozganmiz
 from .views import (
     ProductViewSet,
     SaleViewSet,
@@ -41,6 +41,7 @@ from .views import (
     debtor_detail,
     ProductsTableView,
     abc_xyz_analysis_optimized, UnitViewSet,
+
 )
 
 #  ROUTER
@@ -151,7 +152,8 @@ urlpatterns = [
         'get': 'list',
         'post': 'create'
     })),
-
+    # as_manager emas, as_view bo'ladi!
+    path('roles/<int:pk>/', RoleDetailView.as_view(), name='role-detail'),
     # EMPLOYEES
     path('employees/', EmployeeViewSet.as_view({
         'get': 'list',
