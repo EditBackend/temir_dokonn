@@ -3,13 +3,14 @@ from django.contrib.auth import get_user_model
 from .models import Product, Sale, Category, Supplier, WarehouseIncome, Customer, Role, Employee, Batch, Expense, \
     ExpenseCategory,Unit,Sale
 
+
+
 User = get_user_model()
 
 
 # class EmployeeSerializer(serializers.ModelSerializer):
 #     # create/edit paytida password yoziladi, lekin response’da ko‘rsatilmaydi
 #     password = serializers.CharField(write_only=True, required=False)
-#
 #     class Meta:
 #         model = User
 #         fields = [
@@ -108,6 +109,7 @@ class WarehouseIncomeSerializer(serializers.ModelSerializer):
         model = WarehouseIncome
         fields = "__all__"
         read_only_fields = ('created_at', 'check_number')
+
 
 class BatchSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)

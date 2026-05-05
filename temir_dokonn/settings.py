@@ -64,7 +64,9 @@ CSRF_TRUSTED_ORIGINS = [
 
 # Brauzer cookielarini ruxsat berish
 CSRF_COOKIE_HTTPONLY = False  # Frontend CSRF tokenni o'qiy olishi uchun
-CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'None'  # 'Lax' o'rniga 'None' qiling (Cross-site uchun)
+CSRF_COOKIE_SECURE = True      # HTTPS orqali ishlaganda True bo'lishi shart
+SESSION_COOKIE_SECURE = True
 
 # ========================
 # DJANGO REST FRAMEWORK
@@ -73,12 +75,10 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 1000,
 
-    # MUHIM: API uchun autentifikatsiya turini belgilash
     'DEFAULT_AUTHENTICATION_CLASSES': (
+        # 'rest_framework.authentication.SessionAuthentication', # <--- Buni izohga olib tursang, CSRF so'ramaydi
         'rest_framework.authentication.BasicAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
     ),
-    # Kimlar API ishlata olishi (Hozircha hamma ruxsat etilgan)
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.AllowAny',
     ),
