@@ -100,7 +100,7 @@ def abc_xyz_analysis_optimized(request):
     RECOMMENDATIONS = {
         "AX": "Asosiy kassa generatori. Doimiy zaxira talab etiladi.",
         "AY": "Mavsumiy kassa generatori. Zaxirani mavsumga qarab rejalashtiring.",
-        "AZ": "Yuqori foyda, kutilmagan talab. Buyurtma asosida ishlash tavsiya etiladi.",
+        "AZ": "Yuqori foyda, kutilmagan talab.Buyurtma asosida ishlash tavsiya etiladi.",
         "BX": "Barqaror o'rtacha foyda. Zaxirani me'yorda ushlab turing.",
         "BY": "O'rtacha va o'zgaruvchan talab. Aksiyalar orqali sotuvni oshirish mumkin.",
         "BZ": "Kutilmagan talab va o'rtacha foyda. Katta zaxira qilmang.",
@@ -120,7 +120,6 @@ def abc_xyz_analysis_optimized(request):
             weekly_profit=Sum((F('price') - F('product__last_price')) * F('quantity'))
         )
     )
-
     product_data = defaultdict(lambda: {
         "name": "", "weekly_sales": {}, "total_revenue": 0, "total_profit": 0, "stock": 0
     })
@@ -153,17 +152,15 @@ def abc_xyz_analysis_optimized(request):
     cumulative_percent = 0
     xyz_counts = {"X": 0, "Y": 0, "Z": 0}
     category_counts = {"A": 0, "B": 0, "C": 0}
-
     for p_id, p_info in sorted_products:
         revenue = p_info['total_revenue']
-
-        # --- ABC ---
+        #ABC analiz
         percent = (revenue / total_revenue_sum) * 100
         cumulative_percent += percent
         abc = 'A' if cumulative_percent <= 80 else ('B' if cumulative_percent <= 95 else 'C')
         category_counts[abc] += 1
 
-        # --- XYZ ---
+        # XYZ  analiz
         sales_values = [p_info["weekly_sales"].get(w, 0) for w in all_weeks]
 
         variation = 1.0
@@ -175,7 +172,6 @@ def abc_xyz_analysis_optimized(request):
 
         xyz = 'X' if variation <= 0.15 else ('Y' if variation <= 0.3 else 'Z')
         xyz_counts[xyz] += 1
-
         item_class = f"{abc}{xyz}"
         result.append({
             "product": p_info["name"],
@@ -228,7 +224,7 @@ class TopProductsView(APIView):
 
 class ProductsTableView(APIView):
     def get(self, request):
-        # Sale modelidan guruhlab olish (chunki hamma ma'lumot shunda)
+        # Sale modelidan guruhlab olish
         qs = (
             Sale.objects.values('product__name')
             .annotate(
@@ -299,7 +295,6 @@ class ExpenseViewSet(ModelViewSet):
             qs = qs.filter(branch_id=branch_id)
         if search:
             qs = qs.filter(note__icontains=search)
-
         return qs
 
     def destroy(self, request, *args, **kwargs):
