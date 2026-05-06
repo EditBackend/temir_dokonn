@@ -18,6 +18,9 @@ from .utils import send_telegram_message
 import statistics
 from collections import defaultdict
 from decimal import Decimal
+from rest_framework.permissions import AllowAny
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
 
 
 
@@ -225,38 +228,41 @@ class TopProductsView(APIView):
 
 class ProductsTableView(APIView):
     def get(self, request):
+        # Sale modelidan guruhlab olish (chunki hamma ma'lumot shunda)
         qs = (
-            SaleItem.objects
-            .values('product__name')
+            Sale.objects.values('product__name')
             .annotate(
-                total_sales=Sum(F('price') * F('quantity')),
+                total_sales=Sum('total_price'),
                 total_quantity=Sum('quantity')
             )
             .order_by('-total_sales')
         )
 
         result = []
-
         for item in qs:
             total = item['total_sales'] or 0
             qty = item['total_quantity'] or 0
-
-            avg_price = total / qty if qty else 0
-
             result.append({
                 "name": item['product__name'],
                 "total_sales": total,
                 "quantity": qty,
-                "avg_price": avg_price,
-                "profit": 0  # keyin qo‘shamiz
+                "avg_price": round(total / qty, 2) if qty else 0
             })
-
-        return Response({
-            "success": True,
-            "data": result
-        })
+        return Response({"success": True, "data": result})
 
 
+@api_view(['GET'])
+def top_products(request):
+    # Bu yerda ham Sale modeliga o'tamiz
+    data = (
+        Sale.objects.values('product__name')
+        .annotate(total=Sum('total_price'))
+        .order_by('-total')[:10]
+    )
+    return Response({
+        "success": True,
+        "data": [{"product": i['product__name'], "total": i['total']} for i in data]
+    })
 
 class ExpenseViewSet(ModelViewSet):
     queryset = Expense.objects.filter(is_deleted=False)
@@ -304,29 +310,19 @@ class ExpenseViewSet(ModelViewSet):
 
 
 class ExpenseCategoryList(APIView):
+    permission_classes = [AllowAny] # Mana bu joy xatoni to'g'rilaydi
+
     def get(self, request):
         data = ExpenseCategory.objects.all()
         serializer = ExpenseCategorySerializer(data, many=True)
-        return Response({
-            "success": True,
-            "data": serializer.data
-        })
+        return Response({"success": True, "data": serializer.data})
+
     def post(self, request):
-        # Kelgan ma'lumotni serializerga uzatamiz
         serializer = ExpenseCategorySerializer(data=request.data)
-        # Ma'lumotlar to'g'riligini tekshiramiz
         if serializer.is_valid():
-            serializer.save()  # Bazaga saqlaymiz
-            return Response({
-                "success": True,
-                "data": serializer.data
-            }, status=201)
-        return Response({
-            "success": False,
-            "errors": serializer.errors
-        }, status=400)
-
-
+            serializer.save()
+            return Response({"success": True, "data": serializer.data}, status=201)
+        return Response({"success": False, "errors": serializer.errors}, status=400)
 class BatchViewSet(viewsets.ModelViewSet):
     queryset = Batch.objects.all().order_by('-received_date')
     serializer_class = BatchSerializer
@@ -624,7 +620,7 @@ def check_details(request, check_number=None):
 
         return Response(result)
 
-    # 👉 Bitta check uchun
+    # Bitta check uchun
     sales = Sale.objects.filter(check_number=check_number)
 
     if not sales.exists():
@@ -1138,78 +1134,79 @@ def activity_list(request):
 
 
 class DashboardViewSet(viewsets.ViewSet):
+    # Ruxsatni shu yerning o'zida hamma metodlar uchun ochib qo'yamiz
+    permission_classes = [AllowAny]
+
     @action(detail=False, methods=['get'], url_path='summary')
     def summary(self, request):
         sana_from = request.GET.get('date_from')
         sana_to = request.GET.get('date_to')
         p_type_id = request.GET.get('payment_type')
+
         sales = Sale.objects.all()
-        # 1. Omborga kirim xarajatlari
         warehouse_incomes = WarehouseIncome.objects.all()
-        # 2. Boshqa barcha xarajatlar
         other_expenses = Expense.objects.filter(is_deleted=False)
-        # Sanaga ko'ra filtr
+
         if sana_from and sana_to:
             sales = sales.filter(created_at__date__range=[sana_from, sana_to])
             warehouse_incomes = warehouse_incomes.filter(created_at__date__range=[sana_from, sana_to])
             other_expenses = other_expenses.filter(date__range=[sana_from, sana_to])
-        # To'lov turiga ko'ra filtr
+
         if p_type_id:
             sales = sales.filter(payment_type_id=p_type_id)
-            warehouse_incomes = warehouse_incomes.filter(payment_type_id=p_type_id)
-        # HISOB-KITOB:
+
         total_sales = sales.aggregate(total=Sum('total_price'))['total'] or 0
-        # Ombor xarajati + Boshqa xarajatlar
         total_warehouse_cost = warehouse_incomes.aggregate(total=Sum('total_price'))['total'] or 0
         total_other_cost = other_expenses.aggregate(total=Sum('amount'))['total'] or 0
-        # JAMI CHIQUVCHI PUL
         total_expense = total_warehouse_cost + total_other_cost
+
+        # --- O'tgan oy bilan taqqoslash (Yangi qism) ---
+        prev_month_sales = 0
+        growth_percent = 0
+        if sana_from and sana_to:
+            try:
+                # Stringni sanaga o'tkazamiz
+                d1 = datetime.strptime(sana_from, '%Y-%m-%d')
+                d2 = datetime.strptime(sana_to, '%Y-%m-%d')
+                # Bir oy oldingi sanani hisoblaymiz
+                p_sana_from = d1 - relativedelta(months=1)
+                p_sana_to = d2 - relativedelta(months=1)
+
+                prev_sales_qs = Sale.objects.filter(created_at__date__range=[p_sana_from, p_sana_to])
+                prev_month_sales = prev_sales_qs.aggregate(total=Sum('total_price'))['total'] or 0
+
+                if prev_month_sales > 0:
+                    growth_percent = ((total_sales - prev_month_sales) / prev_month_sales) * 100
+            except Exception as e:
+                print(f"Sana hisoblashda xato: {e}")
+
         return Response({
             "success": True,
             "data": {
                 "total_sales": total_sales,
-                "total_expenses": total_expense,  # Endi bu yerda hamma xarajat bor
-                "warehouse_cost": total_warehouse_cost,  # Alohida ko'rish uchun
-                "other_cost": total_other_cost,  # Alohida ko'rish uchun
-                "net_cash": total_sales - total_expense
+                "total_expenses": total_expense,
+                "warehouse_cost": total_warehouse_cost,
+                "other_cost": total_other_cost,
+                "net_cash": total_sales - total_expense,
+                "comparison": {
+                    "prev_month_sales": prev_month_sales,
+                    "growth_percent": round(growth_percent, 2)
+                }
             }
-        })
-    @action(detail=False, methods=['get'], url_path='sales-expenses-trend')
-    def trend(self, request):
-        # Trendda barcha xarajatlarni ko'rsatish uchun Expense modelini ham qo'shamiz
-        sales = Sale.objects.annotate(date=TruncDate('created_at')) \
-            .values('date') \
-            .annotate(amount=Sum('total_price'))
-        # Ombor xarajatlari
-        w_expenses = WarehouseIncome.objects.annotate(date=TruncDate('created_at')) \
-            .values('date') \
-            .annotate(amount=Sum('total_price'))
-        # Boshqa xarajatlar
-        o_expenses = Expense.objects.filter(is_deleted=False) \
-            .values('date') \
-            .annotate(amount=Sum('amount'))
-        result = {}
-        for s in sales:
-            d = s['date']
-            result[d] = {"date": d, "sales": float(s['amount']), "expenses": 0}
-        # Xarajatlarni birlashtirish
-        for e in list(w_expenses) + list(o_expenses):
-            d = e['date']
-            if d not in result:
-                result[d] = {"date": d, "sales": 0, "expenses": 0}
-            result[d]['expenses'] += float(e['amount'])
-
-        return Response({
-            "success": True,
-            "data": sorted(list(result.values()), key=lambda x: x['date'])
         })
 
     @action(detail=False, methods=['get'], url_path='payment-types')
     def payment_types(self, request):
+        types = PaymentType.objects.all()
+        return Response({
+            "success": True,
+            "data": [{"id": t.id, "name": t.name} for t in types]
+        })    @action(detail=False, methods=['get'], url_path='payment-types')
+
+    def payment_types(self, request):
         # To'lov turlari bo'yicha dinamik filtr
         sales = Sale.objects.all()
         types = PaymentType.objects.all()
-
         data = []
         for p_type in types:
             amount = sales.filter(payment_type=p_type).aggregate(total=Sum('total_price'))['total'] or 0
