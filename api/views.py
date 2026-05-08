@@ -39,34 +39,32 @@ from .serializers import (
     BatchSerializer, ExpenseSerializer, ExpenseCreateSerializer,
     UnitSerializer
 )
-
 class RoleDetailView(APIView):
-    # 1. Bitta rolni olish
-    def get(self, request, pk):
-        try:
-            role = Role.objects.get(pk=pk)
-            serializer = RoleSerializer(role)
-            return Response(serializer.data)
-        except Role.DoesNotExist:
-            return Response({"success": False, "message": "Topilmadi"}, status=status.HTTP_404_NOT_FOUND)
+    # GET va DELETE metodlari o'zgarishsiz qoladi...
+
     def put(self, request, pk):
         try:
             role = Role.objects.get(pk=pk)
-            # data=request.data - yangi kelgan ma'lumotlarni modelga bog'laydi
             serializer = RoleSerializer(role, data=request.data)
             if serializer.is_valid():
                 serializer.save()
-                return Response({"success": True, "data": serializer.data}, status=status.HTTP_200_OK)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"success": True, "data": serializer.data})
+            return Response(serializer.errors, status=400)
         except Role.DoesNotExist:
-            return Response({"success": False, "message": "Topilmadi"}, status=status.HTTP_404_NOT_FOUND)
-    def delete(self, request, pk):
+            return Response({"success": False}, status=404)
+
+    # MANA SHU QISMNI QO'SHING
+    def patch(self, request, pk):
         try:
             role = Role.objects.get(pk=pk)
-            role.delete()
-            return Response({"success": True, "message": "Rol o'chirildi"}, status=status.HTTP_200_OK)
+            # partial=True — bu PATCH uchun eng muhim joyi (qisman yangilashga ruxsat beradi)
+            serializer = RoleSerializer(role, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response({"success": True, "data": serializer.data})
+            return Response(serializer.errors, status=400)
         except Role.DoesNotExist:
-            return Response({"success": False, "message": "Topilmadi"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"success": False}, status=404)
 # User = get_user_model()
 
 
@@ -147,7 +145,6 @@ def abc_xyz_analysis_optimized(request):
     while curr <= end_date:
         all_weeks.append(curr.strftime('%Y-%W'))
         curr += timedelta(weeks=1)
-
     result = []
     cumulative_percent = 0
     xyz_counts = {"X": 0, "Y": 0, "Z": 0}
@@ -160,9 +157,8 @@ def abc_xyz_analysis_optimized(request):
         abc = 'A' if cumulative_percent <= 80 else ('B' if cumulative_percent <= 95 else 'C')
         category_counts[abc] += 1
 
-        # XYZ  analiz
+        # XYZ  aanaliz
         sales_values = [p_info["weekly_sales"].get(w, 0) for w in all_weeks]
-
         variation = 1.0
         if len(sales_values) > 1:
             mean = sum(sales_values) / len(sales_values)
