@@ -21,13 +21,13 @@ from .views import (
     BatchViewSet,
     cash_flow,
     cash_flow_daily,
-    cash_flow_trend,
+    # cash_flow_trend,
     expense_categories,
     monthly_trend,
     monthly_summary,
     monthly_comparison,
     best_worst_day,
-    top_products,
+    # top_products,
     activity_list,
     DashboardViewSet,
     ExpenseCategoryList,
@@ -179,7 +179,7 @@ urlpatterns = [
 
     # CASH FLOW
     path('cash-flow/', cash_flow),
-    path('cash-flow/trend/', cash_flow_trend),
+    # path('cash-flow/trend/', cash_flow_trend),
     path('cash-flow/daily/', cash_flow_daily),
     path('cash-flow/categories/', expense_categories),
 
@@ -190,7 +190,7 @@ urlpatterns = [
     path('monthly/best-worst/', best_worst_day),
 
     # OLD APIs
-    path('products/top/', top_products),
+    # path('products/top/', top_products),
     path('activity/', activity_list),
 
     #  NEW: EXPENSES MODULE

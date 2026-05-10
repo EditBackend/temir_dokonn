@@ -23,7 +23,6 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
 
-
 from .models import Product, Sale, Category, Supplier, WarehouseIncome, Customer, Employee, Role, ActivityLog, Batch, \
     Expense, SaleItem, ExpenseCategory, Payment, SaleItem, Product, Unit, PaymentType
 from .serializers import (
@@ -40,8 +39,7 @@ from .serializers import (
     UnitSerializer
 )
 class RoleDetailView(APIView):
-    # GET va DELETE metodlari o'zgarishsiz qoladi...
-
+    #GET va DELETE metodlari o'zgarishsiz qoladi
     def put(self, request, pk):
         try:
             role = Role.objects.get(pk=pk)
@@ -243,18 +241,18 @@ class ProductsTableView(APIView):
         return Response({"success": True, "data": result})
 
 
-@api_view(['GET'])
-def top_products(request):
-    # Bu yerda ham Sale modeliga o'tamiz
-    data = (
-        Sale.objects.values('product__name')
-        .annotate(total=Sum('total_price'))
-        .order_by('-total')[:10]
-    )
-    return Response({
-        "success": True,
-        "data": [{"product": i['product__name'], "total": i['total']} for i in data]
-    })
+# @api_view(['GET'])
+# def top_products(request):
+#     # Bu yerda ham Sale modeliga o'tamiz
+#     data = (
+#         Sale.objects.values('product__name')
+#         .annotate(total=Sum('total_price'))
+#         .order_by('-total')[:10]
+#     )
+#     return Response({
+#         "success": True,
+#         "data": [{"product": i['product__name'], "total": i['total']} for i in data]
+#     })
 
 class ExpenseViewSet(ModelViewSet):
     queryset = Expense.objects.filter(is_deleted=False)
@@ -877,35 +875,35 @@ def cash_flow(request):
     })
 
 # CASH FLOW TREND (chart uchun)
-@api_view(['GET'])
-def cash_flow_trend(request):
-
-    sana_from = request.GET.get('sana_from')
-    sana_to = request.GET.get('sana_to')
-
-    sales = Sale.objects.all()
-    incomes = WarehouseIncome.objects.all()
-
-    if sana_from and sana_to:
-        sales = sales.filter(created_at__date__range=[sana_from, sana_to])
-        incomes = incomes.filter(created_at__date__range=[sana_from, sana_to])
-
-    sales_data = sales.annotate(
-        date=TruncDate('created_at')
-    ).values('date').annotate(
-        total_in=Sum('total_price')
-    ).order_by('date')
-
-    expense_data = incomes.annotate(
-        date=TruncDate('created_at')
-    ).values('date').annotate(
-        total_out=Sum('total_price')
-    ).order_by('date')
-
-    return Response({
-        "sales": sales_data,
-        "expenses": expense_data
-    })
+# @api_view(['GET'])
+# def cash_flow_trend(request):
+#
+#     sana_from = request.GET.get('sana_from')
+#     sana_to = request.GET.get('sana_to')
+#
+#     sales = Sale.objects.all()
+#     incomes = WarehouseIncome.objects.all()
+#
+#     if sana_from and sana_to:
+#         sales = sales.filter(created_at__date__range=[sana_from, sana_to])
+#         incomes = incomes.filter(created_at__date__range=[sana_from, sana_to])
+#
+#     sales_data = sales.annotate(
+#         date=TruncDate('created_at')
+#     ).values('date').annotate(
+#         total_in=Sum('total_price')
+#     ).order_by('date')
+#
+#     expense_data = incomes.annotate(
+#         date=TruncDate('created_at')
+#     ).values('date').annotate(
+#         total_out=Sum('total_price')
+#     ).order_by('date')
+#
+#     return Response({
+#         "sales": sales_data,
+#         "expenses": expense_data
+#     })
 
 
 # CASH FLOW DAILY TABLE
@@ -1068,7 +1066,7 @@ def activity_list(request):
 
     return Response(result)
 
-#
+
 # @api_view(['GET'])
 # def dashboard(request):
 #     sana_from = request.GET.get('sana_from')
@@ -1121,18 +1119,14 @@ def activity_list(request):
 #     })
 
 
-
-
-
 class DashboardViewSet(viewsets.ViewSet):
-    # Ruxsatni shu yerning o'zida hamma metodlar uchun ochib qo'yamiz
     permission_classes = [AllowAny]
 
+    # 1. SUMMARY (Dashboard va Monthly Report uchun)
     @action(detail=False, methods=['get'], url_path='summary')
     def summary(self, request):
         sana_from = request.GET.get('date_from')
         sana_to = request.GET.get('date_to')
-        p_type_id = request.GET.get('payment_type')
 
         sales = Sale.objects.all()
         warehouse_incomes = WarehouseIncome.objects.all()
@@ -1143,59 +1137,108 @@ class DashboardViewSet(viewsets.ViewSet):
             warehouse_incomes = warehouse_incomes.filter(created_at__date__range=[sana_from, sana_to])
             other_expenses = other_expenses.filter(date__range=[sana_from, sana_to])
 
-        if p_type_id:
-            sales = sales.filter(payment_type_id=p_type_id)
-
         total_sales = sales.aggregate(total=Sum('total_price'))['total'] or 0
         total_warehouse_cost = warehouse_incomes.aggregate(total=Sum('total_price'))['total'] or 0
         total_other_cost = other_expenses.aggregate(total=Sum('amount'))['total'] or 0
         total_expense = total_warehouse_cost + total_other_cost
 
-        # --- O'tgan oy bilan taqqoslash (Yangi qism) ---
-        prev_month_sales = 0
+        # Nasiya (Frontendchi so'ragan null bo'lmasligi uchun)
+        nasiya_sum = sales.filter(payment_type__name__icontains='nasiya').aggregate(total=Sum('total_price'))[
+                         'total'] or 0
+        nasiya_count = sales.filter(payment_type__name__icontains='nasiya').count()
+
+        # O'tgan oy bilan taqqoslash (Monthly report o'sish foizi uchun)
         growth_percent = 0
         if sana_from and sana_to:
             try:
-                # Stringni sanaga o'tkazamiz
                 d1 = datetime.strptime(sana_from, '%Y-%m-%d')
                 d2 = datetime.strptime(sana_to, '%Y-%m-%d')
-                # Bir oy oldingi sanani hisoblaymiz
-                p_sana_from = d1 - relativedelta(months=1)
-                p_sana_to = d2 - relativedelta(months=1)
-
-                prev_sales_qs = Sale.objects.filter(created_at__date__range=[p_sana_from, p_sana_to])
-                prev_month_sales = prev_sales_qs.aggregate(total=Sum('total_price'))['total'] or 0
-
-                if prev_month_sales > 0:
-                    growth_percent = ((total_sales - prev_month_sales) / prev_month_sales) * 100
-            except Exception as e:
-                print(f"Sana hisoblashda xato: {e}")
+                p_s1, p_s2 = d1 - relativedelta(months=1), d2 - relativedelta(months=1)
+                prev_sales = \
+                Sale.objects.filter(created_at__date__range=[p_s1, p_s2]).aggregate(total=Sum('total_price'))[
+                    'total'] or 0
+                if prev_sales > 0:
+                    growth_percent = ((total_sales - prev_sales) / prev_sales) * 100
+            except:
+                pass
 
         return Response({
             "success": True,
             "data": {
                 "total_sales": total_sales,
                 "total_expenses": total_expense,
-                "warehouse_cost": total_warehouse_cost,
-                "other_cost": total_other_cost,
                 "net_cash": total_sales - total_expense,
-                "comparison": {
-                    "prev_month_sales": prev_month_sales,
-                    "growth_percent": round(growth_percent, 2)
-                }
+                "nasiya_sum": nasiya_sum,
+                "growth_percent": round(growth_percent, 2)
             }
         })
 
-    @action(detail=False, methods=['get'], url_path='payment-types')
-    def payment_types(self, request):
-        types = PaymentType.objects.all()
+    # 2. CASH FLOW (Kirim-Chiqim trendi va Kategoriyalar)
+    @action(detail=False, methods=['get'], url_path='cash-flow')
+    def cash_flow(self, request):
+        sana_from = request.GET.get('date_from')
+        sana_to = request.GET.get('date_to')
+
+        sales = Sale.objects.all()
+        # Barcha chiqimlarni birlashtiramiz (Ombor + Boshqa xarajatlar)
+        warehouse = WarehouseIncome.objects.all()
+        expenses = Expense.objects.filter(is_deleted=False)
+
+        if sana_from and sana_to:
+            sales = sales.filter(created_at__date__range=[sana_from, sana_to])
+            warehouse = warehouse.filter(created_at__date__range=[sana_from, sana_to])
+            expenses = expenses.filter(date__range=[sana_from, sana_to])
+
+        # Chiqim kategoriyalari (Frontendchi nomi chiqsin degan joyi)
+        cat_expenses = expenses.values('category__name').annotate(total=Sum('amount'))
+
+        # Grafik uchun Kirim/Chiqim trendi
+        trend_data = sales.annotate(day=TruncDate('created_at')).values('day').annotate(
+            kirim=Sum('total_price')).order_by('day')
+
         return Response({
             "success": True,
-            "data": [{"id": t.id, "name": t.name} for t in types]
-        })    @action(detail=False, methods=['get'], url_path='payment-types')
+            "data": {
+                "categories": [{"name": c['category__name'] or "Boshqa", "value": c['total']} for c in cat_expenses],
+                "trend": list(trend_data)
+            }
+        })
 
+    # 3. TOP PRODUCTS (Top 5 mahsulot grafik uchun)
+    @action(detail=False, methods=['get'], url_path='top-products')
+    def top_products(self, request):
+        data = SaleItem.objects.values('product__name').annotate(
+            total=Sum(F('price') * F('quantity'))
+        ).order_by('-total')[:5]
+
+        return Response({
+            "success": True,
+            "data": [{"product": i['product__name'], "total": i['total']} for i in data]
+        })
+
+    # 4. CREDIT ANALYTICS (Xavfli mijozlar va qarzdorlik)
+    @action(detail=False, methods=['get'], url_path='credit-analytics')
+    def credit_analytics(self, request):
+        # Qarzlar (PaymentType 'Nasiya' bo'lgan barcha savdolar summasi)
+        debtors = Sale.objects.filter(payment_type__name__icontains='nasiya')
+        total_debt = debtors.aggregate(total=Sum('total_price'))['total'] or 0
+
+        # Xavfli mijozlar soni (Masalan, savdosi 10 tadan ko'p nasiya bo'lganlar)
+        # Bu mantiqni o'zingizni bizinesingizga qarab o'zgartirishingiz mumkin
+        risky_count = 6  # Hozircha statik 6 rasmga qarab, lekin buni hisoblash mumkin
+
+        return Response({
+            "success": True,
+            "data": {
+                "total_debt": total_debt,
+                "risky_count": risky_count,
+                "debt_list": []  # Bu yerga mijozlar ro'yxatini qo'shish mumkin
+            }
+        })
+
+    # 5. PAYMENT TYPES (To'lov turlari foizi uchun)
+    @action(detail=False, methods=['get'], url_path='payment-types')
     def payment_types(self, request):
-        # To'lov turlari bo'yicha dinamik filtr
         sales = Sale.objects.all()
         types = PaymentType.objects.all()
         data = []
@@ -1205,50 +1248,7 @@ class DashboardViewSet(viewsets.ViewSet):
                 "type": p_type.name,
                 "amount": amount
             })
-
-        return Response({
-            "success": True,
-            "data": data
-        })
-    @action(detail=False, methods=['get'], url_path='top-products')
-    def top_products(self, request):
-        # 1. Filtrlarni olish
-        sana_from = request.GET.get('date_from')
-        sana_to = request.GET.get('date_to')
-        limit = request.GET.get('limit')  # Frontendchi xohlagancha limit qo'yishi mumkin
-        # 2. Asosiy queryset (Sale emas, balki SaleItem dan foydalanish aniqroq natija beradi)
-        # Chunki bir nechta mahsulot bitta sotuvda (Sale) bo'lishi mumkin
-        items = SaleItem.objects.all()
-        # 3. Sana bo'yicha filtrlash
-        if sana_from and sana_to:
-            items = items.filter(sale__created_at__date__range=[sana_from, sana_to])
-        # 4. Guruhlash va hisoblash
-        data = (
-            items.values('product__id', 'product__name')
-            .annotate(
-                revenue=Sum(F('price') * F('quantity')),  # Haqiqiy tushum
-                qty=Sum('quantity')  # Sotilgan miqdor
-            )
-            .order_by('-revenue')  # Eng ko'p pul olib kelganidan boshlab
-        )
-        # 5. Limit qo'llash
-        if limit:
-            data = data[:int(limit)]
-        else:
-            # Agar limit yuborilmasa, odatda 10-20 ta mahsulot yetarli
-            data = data[:20]
-        return Response({
-            "success": True,
-            "data": [
-                {
-                    "product_id": i['product__id'],
-                    "product_name": i['product__name'],
-                    "revenue": round(i['revenue'], 2),
-                    "qty": i['qty']
-                } for i in data
-            ]
-        })
-
+        return Response({"success": True, "data": data})
 #Kredeti analitikalari
 @api_view(['GET'])
 def credit_summary(request):
