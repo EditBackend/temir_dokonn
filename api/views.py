@@ -38,6 +38,38 @@ from .serializers import (
     BatchSerializer, ExpenseSerializer, ExpenseCreateSerializer,
     UnitSerializer
 )
+
+# EMPLOYEE DETAIL (GET, PATCH, DELETE uchun)
+class EmployeeDetailView(APIView):
+    permission_classes = [AllowAny]
+    def get_object(self, pk):
+        try:
+            return Employee.objects.get(pk=pk)
+        except Employee.DoesNotExist:
+            return None
+    def get(self, request, pk):
+        employee = self.get_object(pk)
+        if not employee: return Response(status=404)
+        serializer = EmployeeSerializer(employee)
+        return Response(serializer.data)
+    def patch(self, request, pk):
+        employee = self.get_object(pk)
+        if not employee: return Response(status=404)
+        serializer = EmployeeSerializer(employee, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=400)
+
+    def delete(self, request, pk):
+        employee = self.get_object(pk)
+        if not employee: return Response(status=404)
+        employee.delete()
+        return Response(status=204)
+
+
+
+
 class RoleDetailView(APIView):
     #GET va DELETE metodlari o'zgarishsiz qoladi
     def put(self, request, pk):
@@ -50,7 +82,6 @@ class RoleDetailView(APIView):
             return Response(serializer.errors, status=400)
         except Role.DoesNotExist:
             return Response({"success": False}, status=404)
-
     # MANA SHU QISMNI QO'SHING
     def patch(self, request, pk):
         try:
@@ -63,9 +94,8 @@ class RoleDetailView(APIView):
             return Response(serializer.errors, status=400)
         except Role.DoesNotExist:
             return Response({"success": False}, status=404)
+
 # User = get_user_model()
-
-
 # class IsBossOnly(permissions.BasePermission):
 #     """Faqat boshliq (boss) ko‘ra oladi/sozlay oladi."""
 #     def has_permission(self, request, view):
@@ -119,7 +149,6 @@ def abc_xyz_analysis_optimized(request):
     product_data = defaultdict(lambda: {
         "name": "", "weekly_sales": {}, "total_revenue": 0, "total_profit": 0, "stock": 0
     })
-
     #Ma'lumotlarni yig'ish
     for entry in sales_qs:
         p_id = entry['product_id']
@@ -401,34 +430,22 @@ class SaleViewSet(ModelViewSet):
 
         if not items:
             return Response({"error": "Items yuborilmadi"}, status=400)
-
         last_sale = Sale.objects.order_by('-check_number').first()
-
         new_check_number = (
             last_sale.check_number + 1
             if last_sale and last_sale.check_number
             else 1
         )
-
         common_time = timezone.now()
         created_sales = []
-
         for item in items:
-
             try:
                 product = Product.objects.get(id=int(item.get("product")))
             except Product.DoesNotExist:
                 return Response({"error": "Mahsulot topilmadi"}, status=404)
-
             # item.get dan kelgan qiymatni Decimal ga o'giramiz
             quantity = Decimal(str(item.get("quantity", 0)))
             price = Decimal(str(item.get("price", 0)))
-            # Xodim arzon sotmasligi uchun tekshiruv
-            # if price < float(product.price):
-            #     return Response(
-            #         {"error": f"{product.name} ni {product.price} dan arzon sotib bo‘lmaydi"},
-            #         status=400
-            #     )
             if product.quantity < quantity:
                 return Response(
                     {"error": f"{product.name} omborda yetarli emas"},
@@ -440,15 +457,11 @@ class SaleViewSet(ModelViewSet):
                 product=product,
                 qty_left__gt=0
             ).order_by('received_date')
-
             if batches.exists():
                 for batch in batches:
-
                     if remaining_qty <= 0:
                         break
-
                     deduct_qty = min(batch.qty_left, remaining_qty)
-
                     batch.qty_left -= deduct_qty
                     batch.save()
                     sale = Sale.objects.create(
@@ -461,14 +474,10 @@ class SaleViewSet(ModelViewSet):
                         created_at=common_time,
                         batch=batch
                     )
-
-
+                    SaleItem.objects.create(sale=sale, product=product, quantity=deduct_qty, price=price)
                     created_sales.append(sale)
-
                     remaining_qty -= deduct_qty
-
             else:
-
                 sale = Sale.objects.create(
                     product=product,
                     quantity=quantity,
@@ -478,12 +487,10 @@ class SaleViewSet(ModelViewSet):
                     check_number=new_check_number,
                     created_at=common_time
                 )
-
+                SaleItem.objects.create(sale=sale, product=product, quantity=quantity, price=price)
                 created_sales.append(sale)
-
             product.quantity -= quantity
             product.save()
-
         ActivityLog.objects.create(
             employee_id=request.data.get("employee"),
             action=f"Sotuv amalga oshirdi (chek {new_check_number})"
@@ -1119,35 +1126,29 @@ def activity_list(request):
 #     })
 
 
+
+
 class DashboardViewSet(viewsets.ViewSet):
     permission_classes = [AllowAny]
-
-    # 1. SUMMARY (Dashboard va Monthly Report uchun)
+    # 1. ASOSIY STATISTIKA (SUMMARY)
     @action(detail=False, methods=['get'], url_path='summary')
     def summary(self, request):
         sana_from = request.GET.get('date_from')
         sana_to = request.GET.get('date_to')
-
         sales = Sale.objects.all()
         warehouse_incomes = WarehouseIncome.objects.all()
         other_expenses = Expense.objects.filter(is_deleted=False)
-
         if sana_from and sana_to:
             sales = sales.filter(created_at__date__range=[sana_from, sana_to])
             warehouse_incomes = warehouse_incomes.filter(created_at__date__range=[sana_from, sana_to])
             other_expenses = other_expenses.filter(date__range=[sana_from, sana_to])
-
         total_sales = sales.aggregate(total=Sum('total_price'))['total'] or 0
-        total_warehouse_cost = warehouse_incomes.aggregate(total=Sum('total_price'))['total'] or 0
-        total_other_cost = other_expenses.aggregate(total=Sum('amount'))['total'] or 0
-        total_expense = total_warehouse_cost + total_other_cost
-
-        # Nasiya (Frontendchi so'ragan null bo'lmasligi uchun)
-        nasiya_sum = sales.filter(payment_type__name__icontains='nasiya').aggregate(total=Sum('total_price'))[
-                         'total'] or 0
-        nasiya_count = sales.filter(payment_type__name__icontains='nasiya').count()
-
-        # O'tgan oy bilan taqqoslash (Monthly report o'sish foizi uchun)
+        total_expense = (warehouse_incomes.aggregate(total=Sum('total_price'))['total'] or 0) + \
+                        (other_expenses.aggregate(total=Sum('amount'))['total'] or 0)
+        nasiya_qs = sales.filter(payment_type__icontains='Nasiya')
+        nasiya_sum = nasiya_qs.aggregate(total=Sum('total_price'))['total'] or 0
+        nasiya_count = nasiya_qs.count()
+        # O'sish foizi (Growth)
         growth_percent = 0
         if sana_from and sana_to:
             try:
@@ -1161,7 +1162,6 @@ class DashboardViewSet(viewsets.ViewSet):
                     growth_percent = ((total_sales - prev_sales) / prev_sales) * 100
             except:
                 pass
-
         return Response({
             "success": True,
             "data": {
@@ -1169,33 +1169,24 @@ class DashboardViewSet(viewsets.ViewSet):
                 "total_expenses": total_expense,
                 "net_cash": total_sales - total_expense,
                 "nasiya_sum": nasiya_sum,
+                "nasiya_count": nasiya_count,
                 "growth_percent": round(growth_percent, 2)
             }
         })
-
-    # 2. CASH FLOW (Kirim-Chiqim trendi va Kategoriyalar)
+    # 2. KIRIM-CHIQIM (CASH FLOW)
     @action(detail=False, methods=['get'], url_path='cash-flow')
     def cash_flow(self, request):
         sana_from = request.GET.get('date_from')
         sana_to = request.GET.get('date_to')
-
         sales = Sale.objects.all()
-        # Barcha chiqimlarni birlashtiramiz (Ombor + Boshqa xarajatlar)
-        warehouse = WarehouseIncome.objects.all()
         expenses = Expense.objects.filter(is_deleted=False)
-
         if sana_from and sana_to:
             sales = sales.filter(created_at__date__range=[sana_from, sana_to])
-            warehouse = warehouse.filter(created_at__date__range=[sana_from, sana_to])
             expenses = expenses.filter(date__range=[sana_from, sana_to])
-
-        # Chiqim kategoriyalari (Frontendchi nomi chiqsin degan joyi)
         cat_expenses = expenses.values('category__name').annotate(total=Sum('amount'))
-
-        # Grafik uchun Kirim/Chiqim trendi
+        # Grafik trendi
         trend_data = sales.annotate(day=TruncDate('created_at')).values('day').annotate(
             kirim=Sum('total_price')).order_by('day')
-
         return Response({
             "success": True,
             "data": {
@@ -1203,52 +1194,49 @@ class DashboardViewSet(viewsets.ViewSet):
                 "trend": list(trend_data)
             }
         })
-
-    # 3. TOP PRODUCTS (Top 5 mahsulot grafik uchun)
+    # 3. TOP PRODUCTS (SaleItem orqali hisoblash)
     @action(detail=False, methods=['get'], url_path='top-products')
     def top_products(self, request):
+        # Bu qism grafikka ma'lumot tayyorlab beradi
         data = SaleItem.objects.values('product__name').annotate(
-            total=Sum(F('price') * F('quantity'))
-        ).order_by('-total')[:5]
+            total_sum=Sum(F('price') * F('quantity'))
+        ).order_by('-total_sum')[:5]
+
+        # Frontendga tushunarli formatga o'tkazamiz
+        result = [{"product": i['product__name'], "total": i['total_sum']} for i in data]
 
         return Response({
             "success": True,
-            "data": [{"product": i['product__name'], "total": i['total']} for i in data]
+            "data": result
         })
 
-    # 4. CREDIT ANALYTICS (Xavfli mijozlar va qarzdorlik)
+
+    # 4. CREDIT ANALYTICS
     @action(detail=False, methods=['get'], url_path='credit-analytics')
     def credit_analytics(self, request):
-        # Qarzlar (PaymentType 'Nasiya' bo'lgan barcha savdolar summasi)
-        debtors = Sale.objects.filter(payment_type__name__icontains='nasiya')
-        total_debt = debtors.aggregate(total=Sum('total_price'))['total'] or 0
-
-        # Xavfli mijozlar soni (Masalan, savdosi 10 tadan ko'p nasiya bo'lganlar)
-        # Bu mantiqni o'zingizni bizinesingizga qarab o'zgartirishingiz mumkin
-        risky_count = 6  # Hozircha statik 6 rasmga qarab, lekin buni hisoblash mumkin
-
+        # TO'G'RI: payment_type__icontains
+        debtors_sum = Sale.objects.filter(payment_type__icontains='Nasiya').aggregate(total=Sum('total_price'))[
+                          'total'] or 0
         return Response({
             "success": True,
             "data": {
-                "total_debt": total_debt,
-                "risky_count": risky_count,
-                "debt_list": []  # Bu yerga mijozlar ro'yxatini qo'shish mumkin
+                "total_debt": debtors_sum,
+                "risky_count": 5,
+                "debt_list": []
             }
         })
-
-    # 5. PAYMENT TYPES (To'lov turlari foizi uchun)
+    # 5. TO'LOV TURLARi
     @action(detail=False, methods=['get'], url_path='payment-types')
     def payment_types(self, request):
         sales = Sale.objects.all()
-        types = PaymentType.objects.all()
+        types = Sale.objects.values_list('payment_type', flat=True).distinct()
         data = []
         for p_type in types:
-            amount = sales.filter(payment_type=p_type).aggregate(total=Sum('total_price'))['total'] or 0
-            data.append({
-                "type": p_type.name,
-                "amount": amount
-            })
+            if p_type:
+                amount = sales.filter(payment_type=p_type).aggregate(total=Sum('total_price'))['total'] or 0
+                data.append({"type": p_type, "amount": amount})
         return Response({"success": True, "data": data})
+
 #Kredeti analitikalari
 @api_view(['GET'])
 def credit_summary(request):

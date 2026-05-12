@@ -41,6 +41,7 @@ from .views import (
     debtor_detail,
     ProductsTableView,
     abc_xyz_analysis_optimized, UnitViewSet,
+    EmployeeDetailView,
 
 )
 
@@ -48,6 +49,7 @@ from .views import (
 router = DefaultRouter()
 router.register(r'dashboard', DashboardViewSet, basename='dashboard')
 router.register(r'units', UnitViewSet) # Bu avtomatik CRUD yo'llarini yaratadi
+
 #  Expense ViewSet
 expense_list = ExpenseViewSet.as_view({
     'get': 'list',
@@ -60,7 +62,12 @@ expense_detail = ExpenseViewSet.as_view({
 })
 
 urlpatterns = [
+# Employee uchun detail yo'li (PATCH va DELETE uchun)
+    path('employees/<int:pk>/', EmployeeDetailView.as_view(), name='employee-detail'),
 
+    # Frontendchi so'rayotgan "api/products/top/" yo'lini dashboardga yo'naltiramiz
+    # Shunda u o'zgartirishi shart bo'lmaydi
+    path('products/top/', DashboardViewSet.as_view({'get': 'top_products'})),
     path('', home),
     path('', include(router.urls)),
     # CATEGORY (OLD)
@@ -215,6 +222,8 @@ urlpatterns = [
 
     # abc analiz
     path('abc-xyz-analysis/', abc_xyz_analysis_optimized),
+
+
 ]
 
 #  MUHIM
