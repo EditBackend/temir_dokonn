@@ -82,10 +82,11 @@ class SupplierSerializer(serializers.ModelSerializer):
         model = Supplier
         fields = "__all__"
 
+
 class ProductSerializer(serializers.ModelSerializer):
     # Agar Product modelida supplier degan ForeignKey bo'lsa, uning nomini chiqarish:
-    supplier_name = serializers.CharField(source='supplier.name', read_only=True)
-    category_name = serializers.CharField(source='category.name', read_only=True)
+    supplierName = serializers.SerializerMethodField()
+    category = serializers.CharField(source='category.name', read_only=True)
 
     class Meta:
         model = Product

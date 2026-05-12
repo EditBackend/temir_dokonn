@@ -156,21 +156,32 @@ class PaymentType(models.Model):
     def __str__(self):
         return self.name
 
+class Supplier(models.Model):
+
+    name = models.CharField(max_length=255)
+
+    phone = models.CharField(max_length=50)
+
+    def __str__(self):
+        return self.name
+
+
 
 class Product(models.Model):
-
     name = models.CharField(max_length=255, null=True, blank=True)
-
     # sotuv narxi
     price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-
     # oxirgi kirim narxi
     last_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-
     quantity = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-
     comment = models.CharField(max_length=500, null=True, blank=True)
-
+    supplier = models.ForeignKey(
+        Supplier,
+        on_delete=models.SET_NULL,
+        related_name="products",
+        null=True,
+        blank=True
+    )
     category = models.ForeignKey(
         Category,
         on_delete=models.SET_NULL,
@@ -212,16 +223,6 @@ class Product(models.Model):
 
     def __str__(self):
         return self.name if self.name else "Nomsiz mahsulot"
-
-class Supplier(models.Model):
-
-    name = models.CharField(max_length=255)
-
-    phone = models.CharField(max_length=50)
-
-    def __str__(self):
-        return self.name
-
 
 class WarehouseIncome(models.Model):
     # PAYMENT_TYPES (tuple) qismini o'chirib tashlaymiz, chunki endi dinamik bo'ladi

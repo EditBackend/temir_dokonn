@@ -1209,12 +1209,10 @@ class DashboardViewSet(viewsets.ViewSet):
             "success": True,
             "data": result
         })
-
-
     # 4. CREDIT ANALYTICS
     @action(detail=False, methods=['get'], url_path='credit-analytics')
     def credit_analytics(self, request):
-        # TO'G'RI: payment_type__icontains
+        # payment_type__icontains deb yozsangiz xato yo'qoladi
         debtors_sum = Sale.objects.filter(payment_type__icontains='Nasiya').aggregate(total=Sum('total_price'))[
                           'total'] or 0
         return Response({
