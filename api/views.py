@@ -283,20 +283,21 @@ class ProductsTableView(APIView):
 #         "data": [{"product": i['product__name'], "total": i['total']} for i in data]
 #     })
 
-class ExpenseViewSet(ModelViewSet):
-    queryset = Expense.objects.filter(is_deleted=False)
 
-    def get_serializer_class(self):
-        return ExpenseCreateSerializer
 
 #boshliq uchun expences oynasi
 class ExpenseViewSet(ModelViewSet):
     queryset = Expense.objects.filter(is_deleted=False).select_related('category', 'created_by')
 
     def get_serializer_class(self):
+        # Create paytida CreateSerializer, ko'rish paytida oddiy Serializer
         if self.action in ['create', 'update', 'partial_update']:
             return ExpenseCreateSerializer
         return ExpenseSerializer
+
+    def perform_create(self, serializer):
+        # Saqlash paytida xodimni avtomatik biriktirish
+        serializer.save(created_by=self.request.user)
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -654,64 +655,70 @@ class SupplierViewSet(ModelViewSet):
 def create_income(request):
     supplier_id = request.data.get("supplier")
     items = request.data.get("lines")
+    employee_id = request.data.get("employee")  # Employee ID ni tepada olamiz
 
     if not supplier_id:
         return Response({"error": "Supplier bo'sh"}, status=400)
-
     if not items:
         return Response({"error": "Items bo'sh"}, status=400)
 
     supplier_id = int(supplier_id)
-
     last_income = WarehouseIncome.objects.order_by('-check_number').first()
-    new_check_number = (
-        last_income.check_number + 1
-        if last_income and last_income.check_number
-        else 1
-    )
-
+    new_check_number = (last_income.check_number + 1) if last_income and last_income.check_number else 1
     common_time = timezone.now()
 
     with transaction.atomic():
-
         for item in items:
-
             try:
                 product = Product.objects.get(id=int(item.get("product")))
-            except Product.DoesNotExist:
-                return Response({"error": "Mahsulot topilmadi"}, status=404)
+            except (Product.DoesNotExist, TypeError, ValueError):
+                return Response({"error": f"Mahsulot (ID: {item.get('product')}) topilmadi"}, status=404)
 
-            quantity = int(item.get("quantity"))
-            price = float(item.get("price"))
+            quantity = Decimal(str(item.get("quantity", 0)))
+            price = Decimal(str(item.get("price", 0)))
+            total_price = quantity * price
 
-            total_price = quantity * price   #  QO‘SHILDI — total hisoblash
-
+            # 1. Kirimni yaratish
             WarehouseIncome.objects.create(
                 supplier_id=supplier_id,
                 product=product,
                 quantity=quantity,
                 price=price,
-                total_price=total_price,   #  QO‘SHILDI — modelga yozildi
+                total_price=total_price,
                 check_number=new_check_number,
                 created_at=common_time
             )
 
+            # 2. Mahsulotni yangilash (Quantity va Last Price)
             product.quantity += quantity
+            product.last_price = price
+            if not product.supplier_id:
+                product.supplier_id = supplier_id
             product.save()
 
+            # 3. Batch (FIFO uchun)
+            Batch.objects.create(
+                product=product,
+                supplier_id=supplier_id,
+                quantity=quantity,
+                qty_left=quantity,
+                purchase_price=price,
+                received_date=common_time
+            )
+        if employee_id:
+            ActivityLog.objects.create(
+                employee_id=employee_id,
+                action=f"{new_check_number}-sonli chek bilan omborga kirim qildi"
+            )
+    # ENDI HAMMASI TAYYOR BO'LGANDAN KEYIN JAVOB QAYTARAMIZ
     return Response({
-        "message": "Kirim saqlandi",
-        "check_number": new_check_number
+        "success": True,
+        "message": "Kirim muvaffaqiyatli saqlandi",
+        "data": {
+            "check_number": new_check_number,
+            "items_count": len(items)
+        }
     })
-
-
-    # kirim tarixini yozish
-    ActivityLog.objects.create(
-    employee_id=request.data.get("employee"),
-    action="Omborga kirim qildi"
-)
-
-
 #  INCOME DETAIL
 @api_view(['GET'])
 def income_check_details(request, check_number=None):
