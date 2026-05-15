@@ -71,7 +71,6 @@ class CustomerSerializer(serializers.ModelSerializer):
         ]
 
 
-
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
@@ -132,6 +131,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
         model = Expense
         fields = '__all__'
 
+
 class ExpenseCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Expense
@@ -143,5 +143,8 @@ class ExpenseCreateSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
-        validated_data['created_by'] = self.context['request'].user
+        request = self.context.get('request')
+        if request and hasattr(request, 'user') and request.user.is_authenticated:
+            validated_data['created_by'] = request.user
+
         return super().create(validated_data)

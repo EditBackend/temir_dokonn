@@ -306,6 +306,7 @@ class WarehouseIncome(models.Model):
                 qty_left=self.quantity
             )
 
+
     def __str__(self):
         product_name = self.product.name if self.product else "Mahsulot yo'q"
         return f"{product_name} - {self.quantity}"
