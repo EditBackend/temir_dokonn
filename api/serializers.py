@@ -94,12 +94,20 @@ class ProductSerializer(serializers.ModelSerializer):
 
 class SaleSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)
-    customer_name = serializers.CharField(source='customer.__str__', read_only=True)
+    customer_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Sale
         fields = '__all__'
         read_only_fields = ('total_price', 'created_at', 'check_number', 'product_name', 'customer_name')
+
+    def get_customer_name(self, obj):
+        if obj.customer:
+            name = f"{obj.customer.first_name} {obj.customer.last_name}".strip()
+            return name if name else obj.customer.phone
+        return "-"
+
+
 
 class WarehouseIncomeSerializer(serializers.ModelSerializer):
     product_name = serializers.ReadOnlyField(source='product.name')
@@ -124,13 +132,15 @@ class ExpenseCategorySerializer(serializers.ModelSerializer):
         model = ExpenseCategory
         fields = ['id', 'name']
 
+
+
 class ExpenseSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='category.name', read_only=True, default="-")
     category = ExpenseCategorySerializer(read_only=True)
 
     class Meta:
         model = Expense
         fields = '__all__'
-
 
 class ExpenseCreateSerializer(serializers.ModelSerializer):
     class Meta:
