@@ -189,7 +189,6 @@ class Product(models.Model):
         null=True,
         blank=True
     )
-
     unit = models.ForeignKey(
         Unit,
         on_delete=models.SET_NULL,
@@ -197,16 +196,11 @@ class Product(models.Model):
         blank=True,
         related_name="products"
     )
-
-
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
     class Meta:
         ordering = ['-created_at']
-
     def save(self, *args, **kwargs):
-
         # Agar mahsulot mavjud bo‘lsa eski narxni tekshiramiz
         if self.pk:
             old_product = Product.objects.get(pk=self.pk)
