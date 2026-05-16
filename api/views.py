@@ -658,25 +658,32 @@ class SupplierViewSet(ModelViewSet):
 def create_income(request):
     supplier_id = request.data.get("supplier")
     items = request.data.get("lines")
-    employee_id = request.data.get("employee")  # Employee ID ni tepada olamiz
+    employee_id = request.data.get("employee")
 
     if not supplier_id:
         return Response({"error": "Supplier bo'sh"}, status=400)
     if not items:
         return Response({"error": "Items bo'sh"}, status=400)
+
     supplier_id = int(supplier_id)
-    last_income = WarehouseIncome.objects.order_by('-check_number').first()
-    new_check_number = (last_income.check_number + 1) if last_income and last_income.check_number else 1
-    common_time = timezone.now()
+
+    # Oxirgi chek raqamini olishda xatolik bo'lmasligi uchun select_for_update ishlatamiz
     with transaction.atomic():
+        last_income = WarehouseIncome.objects.select_for_update().order_by('-check_number').first()
+        new_check_number = (last_income.check_number + 1) if last_income and last_income.check_number else 1
+        common_time = timezone.now()
+
         for item in items:
             try:
-                product = Product.objects.get(id=int(item.get("product")))
+                # select_for_update() bir vaqtda ikkita so'rov kelganda navbatga qo'yadi (Double POST oldini oladi)
+                product = Product.objects.select_for_update().get(id=int(item.get("product")))
             except (Product.DoesNotExist, TypeError, ValueError):
                 return Response({"error": f"Mahsulot (ID: {item.get('product')}) topilmadi"}, status=404)
+
             quantity = Decimal(str(item.get("quantity", 0)))
             price = Decimal(str(item.get("price", 0)))
             total_price = quantity * price
+
             # 1. Kirimni yaratish
             WarehouseIncome.objects.create(
                 supplier_id=supplier_id,
@@ -687,27 +694,37 @@ def create_income(request):
                 check_number=new_check_number,
                 created_at=common_time
             )
-            # 2. Mahsulotni yangilash (Quantity va Last Price)
-            product.quantity += quantity
-            product.last_price = price
-            if not product.supplier_id:
-                product.supplier_id = supplier_id
-            product.save()
-            # 3. Batch (Partiya) yaratish
+
+            # 2. Batch (Partiya) yaratish
             Batch.objects.create(
                 product=product,
                 supplier_id=supplier_id,
                 received_date=common_time.date(),
-                unit_cost=price,  # Modelingizda unit_cost ekan
-                qty_in=quantity,  # Modelingizda qty_in ekan
-                qty_left=quantity,  # Modelingizda qty_left ekan
-                batch_code=f"BATCH-{uuid.uuid4().hex[:8].upper()}"  # Unique code yaratish
+                unit_cost=price,
+                qty_in=quantity,
+                qty_left=quantity,
+                batch_code=f"BATCH-{uuid.uuid4().hex[:8].upper()}"
             )
+
+            # 3. Mahsulotni yangilash (XAVFSIZ USUL)
+            # Agar sizda Batch yaratilganda signal product.quantity ni avtomatik oshirayotgan bo'lsa,
+            # bazadagi eng yangi holatni qayta o'qiymiz:
+            product.refresh_from_db()
+
+            # Agar refresh_from_db dan keyin ham quantity o'zgarmagan bo'lsa (ya'ni signal yo'q bo'lsa),
+            # unda qo'lda qo'shamiz. Hozir sizda 400 ta bo'layotgan bo'lsa, demak signal bor!
+            # Shuning uchun qo'lda qo'shish qismini o'chirib, faqat narxni yangilaymiz:
+            product.last_price = price
+            if not product.supplier_id:
+                product.supplier_id = supplier_id
+            product.save()
+
         if employee_id:
             ActivityLog.objects.create(
                 employee_id=employee_id,
                 action=f"{new_check_number}-sonli chek bilan omborga kirim qildi"
             )
+
     return Response({
         "success": True,
         "message": "Kirim muvaffaqiyatli saqlandi",
