@@ -139,19 +139,52 @@ class ExpenseSerializer(serializers.ModelSerializer):
         model = Expense
         fields = '__all__'
 
+
+
 class ExpenseCreateSerializer(serializers.ModelSerializer):
+    category_id = serializers.IntegerField(write_only=True, required=False)
     class Meta:
         model = Expense
-        fields = ['date', 'category', 'amount', 'payment_type', 'note', 'branch']
-
+        fields = ['date', 'category', 'category_id', 'amount', 'payment_type', 'note', 'branch']
+        extra_kwargs = {
+            'category': {'required': False}
+        }
+    def validate(self, attrs):
+        category_id = attrs.get('category_id')
+        if not category_id and 'category' in self.initial_data:
+            try:
+                category_id = int(self.initial_data.get('category'))
+            except (ValueError, TypeError):
+                pass
+        if not category_id:
+            raise serializers.ValidationError({"category": "Kategoriya ID si yuborilmadi yoki null bo'lib kelyapti."})
+        try:
+            attrs['category'] = ExpenseCategory.objects.get(id=category_id)
+        except ExpenseCategory.DoesNotExist:
+            raise serializers.ValidationError(
+                {"category": f"ID: {category_id} bo'lgan xarajat kategoriyasi topilmadi."})
+        date_val = self.initial_data.get('date')
+        if date_val:
+            for fmt in ('%Y-%m-%d', '%d.%m.%Y', '%d/%m/%Y'):
+                try:
+                    attrs['date'] = datetime.strptime(str(date_val), fmt).date()
+                    break
+                except ValueError:
+                    continue
+        return attrs
     def validate_amount(self, value):
         if value <= 0:
             raise serializers.ValidationError("Amount musbat bo‘lishi kerak")
         return value
 
     def create(self, validated_data):
+        validated_data.pop('category_id', None)
         request = self.context.get('request')
         if request and hasattr(request, 'user') and request.user.is_authenticated:
             validated_data['created_by'] = request.user
+        else:
+            # Login qilmagan bo'lsa server 500 bo'lib qulamaydi, chiroyli error qaytaradi
+            raise serializers.ValidationError(
+                {"error": "Xarajat qo'shish uchun tizimga login qilgan bo'lishingiz shart!"})
 
         return super().create(validated_data)
