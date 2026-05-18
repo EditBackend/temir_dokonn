@@ -903,35 +903,35 @@ def cash_flow(request):
     })
 
 # CASH FLOW TREND (chart uchun)
-# @api_view(['GET'])
-# def cash_flow_trend(request):
-#
-#     sana_from = request.GET.get('sana_from')
-#     sana_to = request.GET.get('sana_to')
-#
-#     sales = Sale.objects.all()
-#     incomes = WarehouseIncome.objects.all()
-#
-#     if sana_from and sana_to:
-#         sales = sales.filter(created_at__date__range=[sana_from, sana_to])
-#         incomes = incomes.filter(created_at__date__range=[sana_from, sana_to])
-#
-#     sales_data = sales.annotate(
-#         date=TruncDate('created_at')
-#     ).values('date').annotate(
-#         total_in=Sum('total_price')
-#     ).order_by('date')
-#
-#     expense_data = incomes.annotate(
-#         date=TruncDate('created_at')
-#     ).values('date').annotate(
-#         total_out=Sum('total_price')
-#     ).order_by('date')
-#
-#     return Response({
-#         "sales": sales_data,
-#         "expenses": expense_data
-#     })
+@api_view(['GET'])
+def cash_flow_trend(request):
+
+    sana_from = request.GET.get('sana_from')
+    sana_to = request.GET.get('sana_to')
+
+    sales = Sale.objects.all()
+    incomes = WarehouseIncome.objects.all()
+
+    if sana_from and sana_to:
+        sales = sales.filter(created_at__date__range=[sana_from, sana_to])
+        incomes = incomes.filter(created_at__date__range=[sana_from, sana_to])
+
+    sales_data = sales.annotate(
+        date=TruncDate('created_at')
+    ).values('date').annotate(
+        total_in=Sum('total_price')
+    ).order_by('date')
+
+    expense_data = incomes.annotate(
+        date=TruncDate('created_at')
+    ).values('date').annotate(
+        total_out=Sum('total_price')
+    ).order_by('date')
+
+    return Response({
+        "sales": sales_data,
+        "expenses": expense_data
+    })
 
 
 # CASH FLOW DAILY TABLE
