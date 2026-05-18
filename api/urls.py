@@ -21,7 +21,7 @@ from .views import (
     BatchViewSet,
     cash_flow,
     cash_flow_daily,
-    cash_flow_trend,
+    # cash_flow_trend,
     expense_categories,
     monthly_trend,
     monthly_summary,
@@ -186,7 +186,8 @@ urlpatterns = [
 
     # CASH FLOW
     path('cash-flow/', cash_flow),
-    path('cash-flow/trend/', cash_flow_trend),
+    # Eski URL'ni dashboard ichidagi tayyor 'cash_flow' funksiyasiga yo'naltiramiz:
+    path('cash-flow/trend/', DashboardViewSet.as_view({'get': 'cash_flow'})),
     path('cash-flow/daily/', cash_flow_daily),
     path('cash-flow/categories/', expense_categories),
 
