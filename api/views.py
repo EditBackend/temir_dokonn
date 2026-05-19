@@ -340,7 +340,7 @@ class ExpenseCategoryList(generics.ListCreateAPIView, generics.RetrieveUpdateDes
         return Response({"success": True, "data": response.data})
     def create(self, request, *args, **kwargs):
         response = super().create(request, *args, **kwargs)
-        return Response({"success": True, "data": response.data}, status=21)
+        return Response({"success": True, "data": response.data}, status=201)
 
 
 
