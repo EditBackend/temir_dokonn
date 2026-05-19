@@ -197,16 +197,17 @@ urlpatterns = [
     path('monthly/comparison/', monthly_comparison),
     path('monthly/best-worst/', best_worst_day),
 
-    # OLD APIs
+    # API
     # path('products/top/', top_products),
     path('activity/', activity_list),
 
-    #  NEW: EXPENSES MODULE
-
+    #EXPENSES MODULE
     path('expenses/categories/', ExpenseCategoryList.as_view()),
+    path('expenses/categories/<int:pk>/', ExpenseCategoryList.as_view()),
     path('expenses/', expense_list),
     path('expenses/<int:pk>/', expense_detail),
     path('expenses/analytics/by-category/', ExpenseAnalyticsView.as_view()),
+
 
     #TOP PRODUCTS (NEW ANALYTICS)
     path('analytics/top-products/', TopProductsView.as_view()),
