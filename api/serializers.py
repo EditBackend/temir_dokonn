@@ -152,7 +152,6 @@ class ExpenseCreateSerializer(serializers.ModelSerializer):
         }
 
     def validate(self, attrs):
-        # ... (Boya yozgan validate kodingiz o'zgarishsiz qoladi) ...
         category_id = attrs.get('category_id')
         if not category_id and 'category' in self.initial_data:
             try:
@@ -192,7 +191,7 @@ class ExpenseCreateSerializer(serializers.ModelSerializer):
         if request and hasattr(request, 'user') and request.user.is_authenticated:
             validated_data['created_by'] = request.user
         else:
-            # 🛑 ERROR QAYTARISHNI OLIB TASHLADIK!
+            # ERROR QAYTARISHNI OLIB TASHLADIK!
             # Login qilmagan bo'lsa, shunchaki created_by = None (null) bo'lib saqlanadi
             validated_data['created_by'] = None
 

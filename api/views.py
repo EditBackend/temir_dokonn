@@ -22,7 +22,7 @@ from decimal import Decimal
 from rest_framework.permissions import AllowAny
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
-
+from rest_framework import generics
 
 from .models import Product, Sale, Category, Supplier, WarehouseIncome, Customer, Employee, Role, ActivityLog, Batch, \
     Expense, SaleItem, ExpenseCategory, Payment, SaleItem, Product, Unit, PaymentType
@@ -331,20 +331,19 @@ class ExpenseViewSet(ModelViewSet):
         return Response({"success": True})
 
 
-class ExpenseCategoryList(APIView):
-    permission_classes = [AllowAny] # Mana bu joy xatoni to'g'rilaydi
+class ExpenseCategoryList(generics.ListCreateAPIView, generics.RetrieveUpdateDestroyAPIView):
+    queryset = ExpenseCategory.objects.all()
+    serializer_class = ExpenseCategorySerializer
+    permission_classes = [AllowAny]
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        return Response({"success": True, "data": response.data})
+    def create(self, request, *args, **kwargs):
+        response = super().create(request, *args, **kwargs)
+        return Response({"success": True, "data": response.data}, status=21)
 
-    def get(self, request):
-        data = ExpenseCategory.objects.all()
-        serializer = ExpenseCategorySerializer(data, many=True)
-        return Response({"success": True, "data": serializer.data})
 
-    def post(self, request):
-        serializer = ExpenseCategorySerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response({"success": True, "data": serializer.data}, status=201)
-        return Response({"success": False, "errors": serializer.errors}, status=400)
+
 class BatchViewSet(viewsets.ModelViewSet):
     queryset = Batch.objects.all().order_by('-received_date')
     serializer_class = BatchSerializer

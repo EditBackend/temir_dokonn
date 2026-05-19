@@ -208,7 +208,9 @@ urlpatterns = [
     path('expenses/<int:pk>/', expense_detail),
     path('expenses/analytics/by-category/', ExpenseAnalyticsView.as_view()),
 
-
+#  NEW: EXPENSES MODULE
+    path('expenses/categories/', ExpenseCategoryList.as_view()),
+    path('expenses/categories/<int:pk>/', ExpenseCategoryList.as_view()), # Mana shu qator aniq tursin
     #TOP PRODUCTS (NEW ANALYTICS)
     path('analytics/top-products/', TopProductsView.as_view()),
     #Kredit analitikalari
