@@ -330,19 +330,28 @@ class ExpenseViewSet(ModelViewSet):
         obj.save()
         return Response({"success": True})
 
-
 class ExpenseCategoryList(generics.ListCreateAPIView, generics.RetrieveUpdateDestroyAPIView):
-    queryset = ExpenseCategory.objects.all()
     serializer_class = ExpenseCategorySerializer
     permission_classes = [AllowAny]
+
+    # 👇 MANA SHU FUNKSIYA FRONTENDCHI AYTGAN FILTR MUAMMOSINI HAL QILADI
+    def get_queryset(self):
+        # Agar url da <int:pk> bo'lsa (ya'ni bitta elementni o'chirish/tahrirlash bo'lsa)
+        if 'pk' in self.kwargs:
+            return ExpenseCategory.objects.filter(id=self.kwargs['pk'])
+        # Agar shunchaki ro'yxatni chaqirsa, hamma kategoriyalarni filtrsiz qaytaramiz
+        return ExpenseCategory.objects.all()
+
+    # Eski GET formati (success: True) buzilmasligi uchun:
     def list(self, request, *args, **kwargs):
-        response = super().list(request, *args, **kwargs)
-        return Response({"success": True, "data": response.data})
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({"success": True, "data": serializer.data})
+
+    # To'g'rilangan POST (status=201) qismi:
     def create(self, request, *args, **kwargs):
         response = super().create(request, *args, **kwargs)
         return Response({"success": True, "data": response.data}, status=201)
-
-
 
 class BatchViewSet(viewsets.ModelViewSet):
     queryset = Batch.objects.all().order_by('-received_date')
@@ -409,14 +418,11 @@ class CategoryViewSet(ModelViewSet):
 
 class ProductViewSet(ModelViewSet):
     serializer_class = ProductSerializer
-
     def get_queryset(self):
         queryset = Product.objects.all()
         category_id = self.request.query_params.get("category")
-
         if category_id:
             queryset = queryset.filter(category_id=category_id)
-
         return queryset
 
 
