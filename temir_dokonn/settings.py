@@ -116,10 +116,12 @@ TEMPLATES = [
 #     }
 # }
 #
-
 DATABASES = {
     'default': dj_database_url.config(
-        default=os.environ.get('DATABASE_URL')
+        default=os.environ.get(
+            'DATABASE_URL',
+            'postgresql://neondb_owner:npg_47bZwunGecog@ep-dawn-morning-apqufij2.c-7.us-east-1.aws.neon.tech/neondb?sslmode=require'
+        )
     )
 }
 
