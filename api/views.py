@@ -72,7 +72,17 @@ class EmployeeDetailView(APIView):
 
 
 class RoleDetailView(APIView):
-    #GET va DELETE metodlari o'zgarishsiz qoladi
+    permission_classes = [AllowAny] # Frontendchi bemalol o'chira olishi uchun
+
+    # Mavjud GET metodi (agar sizda bo'lsa, o'z holicha tursin)
+    def get(self, request, pk):
+        try:
+            role = Role.objects.get(pk=pk)
+            serializer = RoleSerializer(role)
+            return Response({"success": True, "data": serializer.data})
+        except Role.DoesNotExist:
+            return Response({"success": False}, status=404)
+
     def put(self, request, pk):
         try:
             role = Role.objects.get(pk=pk)
@@ -83,11 +93,10 @@ class RoleDetailView(APIView):
             return Response(serializer.errors, status=400)
         except Role.DoesNotExist:
             return Response({"success": False}, status=404)
-    # MANA SHU QISMNI QO'SHING
+
     def patch(self, request, pk):
         try:
             role = Role.objects.get(pk=pk)
-            # partial=True — bu PATCH uchun eng muhim joyi (qisman yangilashga ruxsat beradi)
             serializer = RoleSerializer(role, data=request.data, partial=True)
             if serializer.is_valid():
                 serializer.save()
@@ -96,7 +105,14 @@ class RoleDetailView(APIView):
         except Role.DoesNotExist:
             return Response({"success": False}, status=404)
 
-
+    #  MANA SHU METODNI QO'SHASIZ (DELETE muammosini hal qiladi)
+    def delete(self, request, pk):
+        try:
+            role = Role.objects.get(pk=pk)
+            role.delete() # Bazadan o'chiramiz
+            return Response({"success": True, "message": "Rol muvaffaqiyatli o'chirildi"}, status=200)
+        except Role.DoesNotExist:
+            return Response({"success": False, "error": "Rol topilmadi"}, status=404)
 
 # User = get_user_model()
 # class IsBossOnly(permissions.BasePermission):

@@ -159,8 +159,9 @@ urlpatterns = [
         'get': 'list',
         'post': 'create'
     })),
-    # as_manager emas, as_view bo'ladi!
+
     path('roles/<int:pk>/', RoleDetailView.as_view(), name='role-detail'),
+    # as_manager emas, as_view bo'ladi!
     # EMPLOYEES
     path('employees/', EmployeeViewSet.as_view({
         'get': 'list',
