@@ -56,10 +56,32 @@ class RoleSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-class EmployeeSerializer(serializers.ModelSerializer):
+class EmployeeCreateSerializer(serializers.ModelSerializer):
+    role_id = serializers.IntegerField(write_only=True, required=False)
+
     class Meta:
-        model = Employee
-        fields = "__all__"
+        model = Employee  # Xodimlar modeli nomi
+        fields = ['id', 'first_name', 'last_name', 'phone', 'password', 'is_active', 'role', 'role_id']
+        extra_kwargs = {'role': {'required': False}}
+
+    def validate(self, attrs):
+        role_id = attrs.get('role_id') or self.initial_data.get('role')
+
+        # Agar frontendchi ob'ekt yoki matn yuborgan bo'lsa, ichidan ID ni qidiramiz
+        if isinstance(role_id, dict):
+            role_id = role_id.get('id')
+
+        if role_id:
+            try:
+                from api.models import Role
+                attrs['role'] = Role.objects.get(id=int(role_id))
+            except (Role.DoesNotExist, ValueError, TypeError):
+                raise serializers.ValidationError({"role": "Bunday Rol ID topilmadi."})
+        return attrs
+
+    def create(self, validated_data):
+        validated_data.pop('role_id', None)
+        return super().create(validated_data)
 
 
 
