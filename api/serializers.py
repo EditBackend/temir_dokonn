@@ -15,15 +15,14 @@ class RoleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Role
         fields = "__all__"
-
-
-# 🚀 FRONTENDCHI AYTGAN LOGIN VA ROL MUAMMOSINI HAL QILUVCHI KLASS
 class EmployeeCreateSerializer(serializers.ModelSerializer):
     role_id = serializers.IntegerField(write_only=True, required=False)
+    # 👇 1. API faqat qabul qilishi (lekin modeldan qidirmasligi) uchun soxta login field ochamiz:
+    login = serializers.CharField(write_only=True, required=False)
 
     class Meta:
         model = Employee
-        # 👇 'login' fieldini joyiga qaytardik! Endi frontendchi loginni ham yubora oladi
+        # 👇 2. Bu yerdagi fields tarkibi o'zgarishsiz qoladi, lekin tepada soxta field ochganimiz uchun endi krash bo'lmaydi!
         fields = ['id', 'login', 'first_name', 'last_name', 'phone', 'password', 'is_active', 'role', 'role_id']
         extra_kwargs = {
             'role': {'required': False},
@@ -31,8 +30,12 @@ class EmployeeCreateSerializer(serializers.ModelSerializer):
         }
 
     def validate(self, attrs):
-        role_id = attrs.get('role_id') or self.initial_data.get('role')
+        # 👇 3. Frontendchi yuborgan 'login' qiymatini olib, sening modelindagi 'phone' fieldiga tenglaymiz:
+        login_val = attrs.pop('login', None)
+        if login_val and not attrs.get('phone'):
+            attrs['phone'] = login_val
 
+        role_id = attrs.get('role_id') or self.initial_data.get('role')
         if isinstance(role_id, dict):
             role_id = role_id.get('id')
 
@@ -48,8 +51,7 @@ class EmployeeCreateSerializer(serializers.ModelSerializer):
         validated_data.pop('role_id', None)
         return super().create(validated_data)
 
-
-# 🛑 SERVER KRASH BO'LISHINI OLDINI OLUVCHI ENG MUHIM QATOR!
+#  SERVER KRASH BO'LISHINI OLDINI OLUVCHI ENG MUHIM QATOR!
 # views.py EmployeeSerializer'ni qidirganda adashmasligi uchun unga yo'naltirib qo'yamiz
 EmployeeSerializer = EmployeeCreateSerializer
 

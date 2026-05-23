@@ -227,7 +227,8 @@ urlpatterns = [
 
     # abc analiz
     path('abc-xyz-analysis/', abc_xyz_analysis_optimized),
-
+# 👇 Frontendchi qidirayotgan grafik yo'lagini dashboard ichidagi tayyor funksiyaga ulab qo'yamiz
+    path('api/cash-flow/trend/', DashboardViewSet.as_view({'get': 'cash_flow'})),
 
 ]
 
