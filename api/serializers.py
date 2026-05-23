@@ -1,48 +1,9 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from datetime import datetime
-from .models import Product, Sale, Category, Supplier, WarehouseIncome, Customer, Role, Employee, Batch, Expense, \
-    ExpenseCategory,Unit,Sale
-
-
+from .models import Product, Sale, Category, Supplier, WarehouseIncome, Customer, Role, Employee, Batch, Expense, ExpenseCategory, Unit
 
 User = get_user_model()
-
-
-# class EmployeeSerializer(serializers.ModelSerializer):
-#     # create/edit paytida password yoziladi, lekin response’da ko‘rsatilmaydi
-#     password = serializers.CharField(write_only=True, required=False)
-#     class Meta:
-#         model = User
-#         fields = [
-#             "id",
-#             "login",      # login
-#             "password",
-#             "first_name",
-#             "last_name",
-#             "phone",
-#             "role",
-#             "is_active",
-#         ]
-
-    # def create(self, validated_data):
-    #     password = validated_data.pop("password", None)
-    #     user = User(**validated_data)
-    #     if password:
-    #         user.set_password(password)
-    #     else:
-    #         user.set_password("12345678")
-    #     user.save()
-    #     return user
-    #
-    # def update(self, instance, validated_data):
-    #     password = validated_data.pop("password", None)
-    #     for k, v in validated_data.items():
-    #         setattr(instance, k, v)
-    #     if password:
-    #         instance.set_password(password)
-    #     instance.save()
-    #     return instance
 
 class UnitSerializer(serializers.ModelSerializer):
     class Meta:
@@ -56,18 +17,22 @@ class RoleSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+# 🚀 FRONTENDCHI AYTGAN LOGIN VA ROL MUAMMOSINI HAL QILUVCHI KLASS
 class EmployeeCreateSerializer(serializers.ModelSerializer):
     role_id = serializers.IntegerField(write_only=True, required=False)
 
     class Meta:
-        model = Employee  # Xodimlar modeli nomi
-        fields = ['id', 'first_name', 'last_name', 'phone', 'password', 'is_active', 'role', 'role_id']
-        extra_kwargs = {'role': {'required': False}}
+        model = Employee
+        # 👇 'login' fieldini joyiga qaytardik! Endi frontendchi loginni ham yubora oladi
+        fields = ['id', 'login', 'first_name', 'last_name', 'phone', 'password', 'is_active', 'role', 'role_id']
+        extra_kwargs = {
+            'role': {'required': False},
+            'password': {'write_only': True, 'required': False}
+        }
 
     def validate(self, attrs):
         role_id = attrs.get('role_id') or self.initial_data.get('role')
 
-        # Agar frontendchi ob'ekt yoki matn yuborgan bo'lsa, ichidan ID ni qidiramiz
         if isinstance(role_id, dict):
             role_id = role_id.get('id')
 
@@ -84,6 +49,10 @@ class EmployeeCreateSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
+# 🛑 SERVER KRASH BO'LISHINI OLDINI OLUVCHI ENG MUHIM QATOR!
+# views.py EmployeeSerializer'ni qidirganda adashmasligi uchun unga yo'naltirib qo'yamiz
+EmployeeSerializer = EmployeeCreateSerializer
+
 
 class CustomerSerializer(serializers.ModelSerializer):
     class Meta:
@@ -99,6 +68,7 @@ class CategorySerializer(serializers.ModelSerializer):
         model = Category
         fields = "__all__"
 
+
 class SupplierSerializer(serializers.ModelSerializer):
     class Meta:
         model = Supplier
@@ -111,6 +81,7 @@ class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
         fields = '__all__'
+
 
 class SaleSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)
@@ -126,7 +97,6 @@ class SaleSerializer(serializers.ModelSerializer):
             name = f"{obj.customer.first_name} {obj.customer.last_name}".strip()
             return name if name else obj.customer.phone
         return "-"
-
 
 
 class WarehouseIncomeSerializer(serializers.ModelSerializer):
@@ -151,7 +121,6 @@ class ExpenseCategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = ExpenseCategory
         fields = ['id', 'name']
-
 
 
 class ExpenseSerializer(serializers.ModelSerializer):
@@ -204,17 +173,11 @@ class ExpenseCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Amount musbat bo‘lishi kerak")
         return value
 
-    # 👇 MANA SHU YERINI O'ZGARTIRAMIZ
     def create(self, validated_data):
         validated_data.pop('category_id', None)
-
         request = self.context.get('request')
-        # Agar foydalanuvchi login qilgan bo'lsa, uning ID sini biriktiramiz
         if request and hasattr(request, 'user') and request.user.is_authenticated:
             validated_data['created_by'] = request.user
         else:
-            # ERROR QAYTARISHNI OLIB TASHLADIK!
-            # Login qilmagan bo'lsa, shunchaki created_by = None (null) bo'lib saqlanadi
             validated_data['created_by'] = None
-
         return super().create(validated_data)
