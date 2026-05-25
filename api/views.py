@@ -666,87 +666,134 @@ class SupplierViewSet(ModelViewSet):
     serializer_class = SupplierSerializer
 
 
-#  INCOME CREATE
+#  INCOME CREATE & GET PAYMENT TYPES
 @csrf_exempt
-@api_view(['POST'])
+@api_view(['GET', 'POST'])
 def create_income(request):
-    supplier_id = request.data.get("supplier")
-    items = request.data.get("lines")
-    employee_id = request.data.get("employee")
+    # 🌟 1. Agar frontendchi dropdown uchun to'lov turlarini so'rasa:
+    if request.method == 'GET':
+        types = PaymentType.objects.all()
+        data = [{"id": t.id, "name": t.name} for t in types]
+        return Response(data)
 
-    if not supplier_id:
-        return Response({"error": "Supplier bo'sh"}, status=400)
-    if not items:
-        return Response({"error": "Items bo'sh"}, status=400)
+    # 🌟 2. Agar frontendchi kirimni saqlash uchun POST so'rov yuborsa:
+    if request.method == 'POST':
+        supplier_id = request.data.get("supplier")
+        items = request.data.get("lines")
+        employee_id = request.data.get("employee")
+        # Frontenddan tanlangan to'lov turi ID-sini olamiz:
+        payment_type_id = request.data.get("payment_type_id")
 
-    supplier_id = int(supplier_id)
+        if not supplier_id:
+            return Response({"error": "Supplier bo'sh"}, status=400)
+        if not items:
+            return Response({"error": "Items bo'sh"}, status=400)
+        if not payment_type_id:
+            return Response({"error": "To'lov turi (payment_type_id) tanlanmagan"}, status=400)
 
-    # Oxirgi chek raqamini olishda xatolik bo'lmasligi uchun select_for_update ishlatamiz
-    with transaction.atomic():
-        last_income = WarehouseIncome.objects.select_for_update().order_by('-check_number').first()
-        new_check_number = (last_income.check_number + 1) if last_income and last_income.check_number else 1
-        common_time = timezone.now()
+        supplier_id = int(supplier_id)
 
-        for item in items:
+        try:
+            payment_type = PaymentType.objects.get(id=int(payment_type_id))
+        except (PaymentType.DoesNotExist, ValueError, TypeError):
+            return Response({"error": "Bunday to'lov turi topilmadi"}, status=400)
+
+        p_type_name = payment_type.name.lower()
+        chek_umumiy_summasi = Decimal('0.00')
+
+        with transaction.atomic():
+            last_income = WarehouseIncome.objects.select_for_update().order_by('-check_number').first()
+            new_check_number = (last_income.check_number + 1) if last_income and last_income.check_number else 1
+            common_time = timezone.now()
+
+            # Birinchi ta'minotchini blocklab olamiz (Parallel yozishda muammo bo'lmasligi uchun)
+            from .models import Supplier
             try:
-                # select_for_update() bir vaqtda ikkita so'rov kelganda navbatga qo'yadi (Double POST oldini oladi)
-                product = Product.objects.select_for_update().get(id=int(item.get("product")))
-            except (Product.DoesNotExist, TypeError, ValueError):
-                return Response({"error": f"Mahsulot (ID: {item.get('product')}) topilmadi"}, status=404)
+                supplier = Supplier.objects.select_for_update().get(id=supplier_id)
+            except Supplier.DoesNotExist:
+                return Response({"error": "Ta'minotchi topilmadi"}, status=404)
 
-            quantity = Decimal(str(item.get("quantity", 0)))
-            price = Decimal(str(item.get("price", 0)))
-            total_price = quantity * price
+            for item in items:
+                try:
+                    product = Product.objects.select_for_update().get(id=int(item.get("product")))
+                except (Product.DoesNotExist, TypeError, ValueError):
+                    return Response({"error": f"Mahsulot (ID: {item.get('product')}) topilmadi"}, status=404)
 
-            # 1. Kirimni yaratish
-            WarehouseIncome.objects.create(
-                supplier_id=supplier_id,
-                product=product,
-                quantity=quantity,
-                price=price,
-                total_price=total_price,
-                check_number=new_check_number,
-                created_at=common_time
-            )
+                quantity = Decimal(str(item.get("quantity", 0)))
+                price = Decimal(str(item.get("price", 0)))
+                total_price = quantity * price
 
-            # 2. Batch (Partiya) yaratish
-            Batch.objects.create(
-                product=product,
-                supplier_id=supplier_id,
-                received_date=common_time.date(),
-                unit_cost=price,
-                qty_in=quantity,
-                qty_left=quantity,
-                batch_code=f"BATCH-{uuid.uuid4().hex[:8].upper()}"
-            )
+                # Jami chek summasini yig'ib boramiz
+                chek_umumiy_summasi += total_price
 
-            # 3. Mahsulotni yangilash (XAVFSIZ USUL)
-            # Agar sizda Batch yaratilganda signal product.quantity ni avtomatik oshirayotgan bo'lsa,
-            # bazadagi eng yangi holatni qayta o'qiymiz:
-            product.refresh_from_db()
+                # 1. Kirimni yaratish (payment_type bilan birga)
+                WarehouseIncome.objects.create(
+                    supplier=supplier,
+                    product=product,
+                    quantity=quantity,
+                    price=price,
+                    total_price=total_price,
+                    check_number=new_check_number,
+                    created_at=common_time,
+                    payment_type=payment_type,
+                    employee_id=employee_id if employee_id else None
+                )
 
-            # Agar refresh_from_db dan keyin ham quantity o'zgarmagan bo'lsa (ya'ni signal yo'q bo'lsa),
-            # unda qo'lda qo'shamiz. Hozir sizda 400 ta bo'layotgan bo'lsa, demak signal bor!
-            # Shuning uchun qo'lda qo'shish qismini o'chirib, faqat narxni yangilaymiz:
-            product.last_price = price
-            if not product.supplier_id:
-                product.supplier_id = supplier_id
-            product.save()
+                # 2. Batch (Partiya) yaratish
+                Batch.objects.create(
+                    product=product,
+                    supplier=supplier,
+                    received_date=common_time.date(),
+                    unit_cost=price,
+                    qty_in=quantity,
+                    qty_left=quantity,
+                    batch_code=f"BATCH-{uuid.uuid4().hex[:8].upper()}"
+                )
 
-        if employee_id:
-            ActivityLog.objects.create(
-                employee_id=employee_id,
-                action=f"{new_check_number}-sonli chek bilan omborga kirim qildi"
-            )
+                # 3. Mahsulotni yangilash
+                product.refresh_from_db()
+                product.last_price = price
+                if not product.supplier_id:
+                    product.supplier_id = supplier_id
+                product.save()
 
-    return Response({
-        "success": True,
-        "message": "Kirim muvaffaqiyatli saqlandi",
-        "data": {
-            "check_number": new_check_number,
-            "items_count": len(items)
-        }
-    })
+            # 🔥 PULLARNI HISOBLASH MANTIQLARI (Chek yakunlangandan keyin 1 marta ishlaydi)
+
+            # A) Agar Nasiya bo'lsa - Ta'minotchining qarzini oshiramiz
+            if 'nasiya' in p_type_name:
+                supplier.debt += chek_umumiy_summasi
+                supplier.total_debt += chek_umumiy_summasi
+                supplier.save()
+
+            # B) Naqd yoki Karta bo'lsa - Dashboardga Xarajat qilib yozamiz
+            else:
+                category, _ = ExpenseCategory.objects.get_or_create(name="Ombor kirimi uchun")
+                expense_payment_type = 'card' if 'kart' in p_type_name else 'cash'
+
+                Expense.objects.create(
+                    date=common_time.date(),
+                    category=category,
+                    amount=chek_umumiy_summasi,
+                    payment_type=expense_payment_type,
+                    note=f"Omborga kirim #{new_check_number}. Ta'minotchi: {supplier.name}",
+                    created_by_id=None
+                )
+
+            if employee_id:
+                ActivityLog.objects.create(
+                    employee_id=employee_id,
+                    action=f"{new_check_number}-sonli chek bilan omborga kirim qildi"
+                )
+
+        return Response({
+            "success": True,
+            "message": "Kirim muvaffaqiyatli saqlandi",
+            "data": {
+                "check_number": new_check_number,
+                "items_count": len(items),
+                "total_amount": float(chek_umumiy_summasi)
+            }
+        })
 #  INCOME DETAIL
 @api_view(['GET'])
 def income_check_details(request, check_number=None):
