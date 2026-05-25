@@ -47,18 +47,29 @@ EmployeeSerializer = EmployeeCreateSerializer
 
 #  Mahsulotlar uchun to'g'rilangan serializer
 class ProductSerializer(serializers.ModelSerializer):
+    # Ham camelCase, ham snake_case qilib ikkala variantini ham beramiz!
+    supplierName = serializers.CharField(source='supplier.name', read_only=True, default="-")
     supplier_name = serializers.CharField(source='supplier.name', read_only=True, default="-")
+
+    categoryName = serializers.CharField(source='category.name', read_only=True, default="-")
     category_name = serializers.CharField(source='category.name', read_only=True, default="-")
+
     unit_name = serializers.CharField(source='unit.name', read_only=True, default="-")
+    unitName = serializers.CharField(source='unit.name', read_only=True, default="-")
 
     class Meta:
         model = Product
-        # 🔥 fields-ga aniq yozib qo'yamiz, shunda ID-lar bilan birga NOM-lar ham chiroyli ketadi
-        fields = [
-            'id', 'name', 'price', 'last_price', 'quantity', 'comment',
-            'supplier', 'supplier_name', 'category', 'category_name',
-            'unit', 'unit_name', 'created_at', 'updated_at'
-        ]
+        # __all__ turaversa, qo'shimcha tepada yaratilgan text maydonlar ham qo'shilib boradi
+        fields = '__all__'
+
+    # class Meta:
+    #     model = Product
+    #     # 🔥 fields-ga aniq yozib qo'yamiz, shunda ID-lar bilan birga NOM-lar ham chiroyli ketadi
+    #     fields = [
+    #         'id', 'name', 'price', 'last_price', 'quantity', 'comment',
+    #         'supplier', 'supplier_name', 'category', 'category_name',
+    #         'unit', 'unit_name', 'created_at', 'updated_at'
+    #     ]
 
 
 EmployeeSerializer = EmployeeCreateSerializer
@@ -83,7 +94,7 @@ class CategorySerializer(serializers.ModelSerializer):
 class SupplierSerializer(serializers.ModelSerializer):
     class Meta:
         model = Supplier
-        fields = "__all__"
+        fields = ['id', 'name', 'phone', 'debt', 'total_debt']
 
 
 # class ProductSerializer(serializers.ModelSerializer):
@@ -114,12 +125,40 @@ class SaleSerializer(serializers.ModelSerializer):
 class WarehouseIncomeSerializer(serializers.ModelSerializer):
     product_name = serializers.ReadOnlyField(source='product.name')
     supplier_name = serializers.ReadOnlyField(source='supplier.name')
+    # Frontend jadvalda to'lov turi nomini (Naqd, Karta, Nasiya) ko'rishi uchun:
+    payment_type_name = serializers.ReadOnlyField(source='payment_type.name')
+
+    # 🌟 Frontendchi dropdown (select) dan tanlagan ID-sini yuborishi uchun maydon:
+    payment_type_id = serializers.IntegerField(write_only=True, required=False)
+
     class Meta:
         model = WarehouseIncome
-        fields = "__all__"
-        read_only_fields = ('created_at', 'check_number')
+        fields = [
+            'id', 'product', 'product_name', 'supplier', 'supplier_name',
+            'quantity', 'price', 'payment_type', 'payment_type_id', 'payment_type_name',
+            'total_price', 'check_number', 'created_at', 'employee'
+        ]
+        read_only_fields = ('created_at', 'check_number', 'total_price')
 
+    def validate(self, attrs):
+        # Frontenddan kelayotgan payment_type_id ni tekshirib, modeldagi ForeignKeyga bog'laymiz
+        payment_type_id = attrs.get('payment_type_id') or self.initial_data.get('payment_type')
+        if isinstance(payment_type_id, dict):
+            payment_type_id = payment_type_id.get('id')
 
+        if payment_type_id:
+            try:
+                # O'zingizning loyihangizdagi PaymentType modelini chaqiramiz
+                from .models import PaymentType
+                attrs['payment_type'] = PaymentType.objects.get(id=int(payment_type_id))
+            except (PaymentType.DoesNotExist, ValueError, TypeError):
+                raise serializers.ValidationError({"payment_type": "Bunday to'lov turi topilmadi."})
+        return attrs
+
+    def create(self, validated_data):
+        # Vaqtinchalik ishlatilgan ID maydonini o'chiramiz va saqlaymiz
+        validated_data.pop('payment_type_id', None)
+        return super().create(validated_data)
 class BatchSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)

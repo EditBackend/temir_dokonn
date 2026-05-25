@@ -157,10 +157,13 @@ class PaymentType(models.Model):
         return self.name
 
 class Supplier(models.Model):
-
     name = models.CharField(max_length=255)
-
     phone = models.CharField(max_length=50)
+
+
+    # SHU IKKI QATORNI QO'SHING:
+    debt = models.DecimalField(max_digits=12, decimal_places=2, default=0)  # Oxirgi qarzlar uchun
+    total_debt = models.DecimalField(max_digits=12, decimal_places=2, default=0)  # Jami qarzimiz
 
     def __str__(self):
         return self.name
@@ -240,7 +243,7 @@ class WarehouseIncome(models.Model):
     quantity = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
-    # BU YER O'ZGARDI: CharField o'rniga ForeignKey
+    # BU YER O'ZGARDI CharField o'rniga ForeignKey
     payment_type = models.ForeignKey(
         PaymentType,
         on_delete=models.PROTECT,  # SET_PROTECT emas, shunchaki PROTECT
@@ -261,28 +264,39 @@ class WarehouseIncome(models.Model):
     )
 
     def save(self, *args, **kwargs):
+        # 1. Umumiy summani hisoblash
         self.total_price = (self.quantity or 0) * (self.price or 0)
         is_new = self.pk is None
+
+        # 2. Asosiy Django save funksiyasini chaqirish
         super().save(*args, **kwargs)
 
-        # Xarajatga yozish logikasi (Dinamik holatga moslandi)
+        # 3. Xarajatga yozish va Ta'minotchi qarzini hisoblash logikasi
         if is_new and self.payment_type:
-            # Nasiyadan boshqa har qanday to'lov turi xarajat hisoblanadi
-            if self.payment_type.name.lower() != 'nasiya':
-                category, _ = ExpenseCategory.objects.get_or_create(name="Ombor kirimi uchun")
+            p_type_name = self.payment_type.name.lower()
 
-                # Expense modelidagi payment_type CharField bo'lgani uchun string beramiz
-                # Agar Expense'dagi payment_type ham dinamik bo'lsa, uni ham o'zgartirish kerak bo'ladi
-                # Expense yaratish qismi
+            # 🔥 Agar to'lov turi Nasiya bo'lsa - Ta'minotchi qarzini oshiramiz
+            if 'nasiya' in p_type_name:
+                if self.supplier:
+                    self.supplier.debt += self.total_price
+                    self.supplier.total_debt += self.total_price
+                    self.supplier.save()
+
+            # 🔥 Agar Naqd yoki Karta bo'lsa - srazu Xarajat (Dashboard)ga yoziladi
+            else:
+                category, _ = ExpenseCategory.objects.get_or_create(name="Ombor kirimi uchun")
+                expense_payment_type = 'card' if 'kart' in p_type_name else 'cash'
+
                 Expense.objects.create(
                     date=timezone.now().date(),
                     category=category,
                     amount=self.total_price,
-                    payment_type='cash',
-                    note=f"Kirim #{self.id}: {self.product.name if self.product else 'Nomsiz'}",
-                    created_by=None  # 🌟 Xatolik bermasligi uchun None qildik
+                    payment_type=expense_payment_type,
+                    note=f"Kirim #{self.id}: {self.product.name if self.product else 'Nomsiz'} ({self.supplier.name if self.supplier else 'Nomsiz ta`minotchi'})",
+                    created_by=None
                 )
-        #Ombor qoldig'ini yangilash va FIFO batch yaratish
+
+        # 4. Ombor qoldig'ini yangilash va FIFO batch yaratish
         if is_new and self.product:
             if self.product.quantity is None:
                 self.product.quantity = 0
@@ -299,8 +313,6 @@ class WarehouseIncome(models.Model):
                 qty_in=self.quantity,
                 qty_left=self.quantity
             )
-
-
     def __str__(self):
         product_name = self.product.name if self.product else "Mahsulot yo'q"
         return f"{product_name} - {self.quantity}"
