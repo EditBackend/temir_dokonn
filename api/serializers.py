@@ -158,6 +158,7 @@ class WarehouseIncomeSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         # Vaqtinchalik ishlatilgan ID maydonini o'chiramiz va saqlaymiz
         validated_data.pop('payment_type_id', None)
+
         return super().create(validated_data)
 class BatchSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)

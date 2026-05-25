@@ -222,7 +222,14 @@ class Product(models.Model):
         return self.name if self.name else "Nomsiz mahsulot"
 
 class WarehouseIncome(models.Model):
-    # PAYMENT_TYPES (tuple) qismini o'chirib tashlaymiz, chunki endi dinamik bo'ladi
+
+
+    PAYMENT_TYPES = (
+        ('Naqd', 'Naqd'),
+        ('Karta', 'Karta'),
+        ('Nasiya', 'Nasiya'),
+    )
+
 
     product = models.ForeignKey(
         Product,
