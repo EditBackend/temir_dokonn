@@ -273,14 +273,14 @@ class WarehouseIncome(models.Model):
 
                 # Expense modelidagi payment_type CharField bo'lgani uchun string beramiz
                 # Agar Expense'dagi payment_type ham dinamik bo'lsa, uni ham o'zgartirish kerak bo'ladi
+                # Expense yaratish qismi
                 Expense.objects.create(
-                    date=timezone.now().date(),  # created_at o'rniga hozirgi vaqtni beramiz
+                    date=timezone.now().date(),
                     category=category,
                     amount=self.total_price,
                     payment_type='cash',
                     note=f"Kirim #{self.id}: {self.product.name if self.product else 'Nomsiz'}",
-                    # created_by qismini soddalashtiramiz:
-                    created_by=self.employee.user if self.employee and hasattr(self.employee, 'user') else None
+                    created_by=None  # 🌟 Xatolik bermasligi uchun None qildik
                 )
         #Ombor qoldig'ini yangilash va FIFO batch yaratish
         if is_new and self.product:

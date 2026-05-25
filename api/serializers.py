@@ -16,35 +16,50 @@ class RoleSerializer(serializers.ModelSerializer):
         model = Role
         fields = "__all__"
 
-
+#  Xodimlar uchun to'g'rilangan serializer
 class EmployeeCreateSerializer(serializers.ModelSerializer):
-    role_id = serializers.IntegerField(write_only=True, required=False)
+    role_name = serializers.CharField(source='role.name', read_only=True, default="-")
 
     class Meta:
         model = Employee
-        # 'login' endi haqiqiy maydon sifatida fields ichida bemalol turaveradi!
-        fields = ['id', 'login', 'first_name', 'last_name', 'phone', 'password', 'is_active', 'role', 'role_id']
+        # 🔥 role_name ro'yxatga qo'shildi! Endi frontendga roli matn ko'rinishida boradi.
+        fields = ['id', 'login', 'first_name', 'last_name', 'phone', 'is_active', 'role', 'role_name']
         extra_kwargs = {
-            'role': {'required': False},
-            'password': {'write_only': True, 'required': False}
+            'password': {'write_only': True, 'required': False},
+            'role': {'required': False}
         }
 
     def validate(self, attrs):
-        role_id = attrs.get('role_id') or self.initial_data.get('role')
+        # Frontenddan kelayotgan rolni tekshirish
+        role_id = self.initial_data.get('role')
         if isinstance(role_id, dict):
             role_id = role_id.get('id')
 
         if role_id:
             try:
-                from api.models import Role
                 attrs['role'] = Role.objects.get(id=int(role_id))
             except (Role.DoesNotExist, ValueError, TypeError):
                 raise serializers.ValidationError({"role": "Bunday Rol ID topilmadi."})
         return attrs
 
-    def create(self, validated_data):
-        validated_data.pop('role_id', None)
-        return super().create(validated_data)
+EmployeeSerializer = EmployeeCreateSerializer
+
+
+#  Mahsulotlar uchun to'g'rilangan serializer
+class ProductSerializer(serializers.ModelSerializer):
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True, default="-")
+    category_name = serializers.CharField(source='category.name', read_only=True, default="-")
+    unit_name = serializers.CharField(source='unit.name', read_only=True, default="-")
+
+    class Meta:
+        model = Product
+        # 🔥 fields-ga aniq yozib qo'yamiz, shunda ID-lar bilan birga NOM-lar ham chiroyli ketadi
+        fields = [
+            'id', 'name', 'price', 'last_price', 'quantity', 'comment',
+            'supplier', 'supplier_name', 'category', 'category_name',
+            'unit', 'unit_name', 'created_at', 'updated_at'
+        ]
+
 
 EmployeeSerializer = EmployeeCreateSerializer
 
@@ -71,13 +86,13 @@ class SupplierSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-class ProductSerializer(serializers.ModelSerializer):
-    supplierName = serializers.CharField(source='supplier.name', read_only=True, default="-")
-    categoryName = serializers.CharField(source='category.name', read_only=True, default="-")
-    unit_name = serializers.CharField(source='unit.name', read_only=True, default="-")
-    class Meta:
-        model = Product
-        fields = '__all__'
+# class ProductSerializer(serializers.ModelSerializer):
+#     supplierName = serializers.CharField(source='supplier.name', read_only=True, default="-")
+#     categoryName = serializers.CharField(source='category.name', read_only=True, default="-")
+#     unit_name = serializers.CharField(source='unit.name', read_only=True, default="-")
+#     class Meta:
+#         model = Product
+#         fields = '__all__'
 
 
 class SaleSerializer(serializers.ModelSerializer):
