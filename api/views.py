@@ -690,35 +690,28 @@ def create_income(request):
             return Response({"error": "Items bo'sh"}, status=400)
         if not payment_type_id:
             return Response({"error": "To'lov turi (payment_type_id) tanlanmagan"}, status=400)
-
         supplier_id = int(supplier_id)
-
         try:
             payment_type = PaymentType.objects.get(id=int(payment_type_id))
         except (PaymentType.DoesNotExist, ValueError, TypeError):
             return Response({"error": "Bunday to'lov turi topilmadi"}, status=400)
-
         p_type_name = payment_type.name.lower()
         chek_umumiy_summasi = Decimal('0.00')
-
         with transaction.atomic():
             last_income = WarehouseIncome.objects.select_for_update().order_by('-check_number').first()
             new_check_number = (last_income.check_number + 1) if last_income and last_income.check_number else 1
             common_time = timezone.now()
-
             # Birinchi ta'minotchini blocklab olamiz (Parallel yozishda muammo bo'lmasligi uchun)
             from .models import Supplier
             try:
                 supplier = Supplier.objects.select_for_update().get(id=supplier_id)
             except Supplier.DoesNotExist:
                 return Response({"error": "Ta'minotchi topilmadi"}, status=404)
-
             for item in items:
                 try:
                     product = Product.objects.select_for_update().get(id=int(item.get("product")))
                 except (Product.DoesNotExist, TypeError, ValueError):
                     return Response({"error": f"Mahsulot (ID: {item.get('product')}) topilmadi"}, status=404)
-
                 quantity = Decimal(str(item.get("quantity", 0)))
                 price = Decimal(str(item.get("price", 0)))
                 total_price = quantity * price
