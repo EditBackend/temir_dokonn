@@ -681,8 +681,8 @@ def create_income(request):
         supplier_id = request.data.get("supplier")
         items = request.data.get("lines")
         employee_id = request.data.get("employee")
-        # Frontenddan tanlangan to'lov turi ID-sini olamiz:
-        payment_type_id = request.data.get("payment_type_id")
+        # Frontendchi xohlagan 'payment_type' nomini ham, 'payment_type_id' nomini ham tekshirib olamiz:
+        payment_type_id = request.data.get("payment_type") or request.data.get("payment_type_id")
 
         if not supplier_id:
             return Response({"error": "Supplier bo'sh"}, status=400)
