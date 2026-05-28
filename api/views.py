@@ -750,7 +750,7 @@ def create_income(request):
                     product.supplier_id = supplier_id
                 product.save()
 
-            # 🔥 PULLARNI HISOBLASH MANTIQLARI (Chek yakunlangandan keyin 1 marta ishlaydi)
+            #  PULLARNI HISOBLASH MANTIQLARI (Chek yakunlangandan keyin 1 marta ishlaydi)
 
             # A) Agar Nasiya bo'lsa - Ta'minotchining qarzini oshiramiz
             if 'nasiya' in p_type_name:
@@ -790,61 +790,75 @@ def create_income(request):
 #  INCOME DETAIL
 @api_view(['GET'])
 def income_check_details(request, check_number=None):
-
     if check_number is None:
-
         checks = WarehouseIncome.objects.values('check_number').distinct().order_by('-check_number')
         result = []
 
         for check in checks:
-
             number = check['check_number']
-            incomes = WarehouseIncome.objects.filter(check_number=number)
+            if number is None:
+                continue
 
+            incomes = WarehouseIncome.objects.filter(check_number=number)
             total = incomes.aggregate(total_sum=Sum('quantity'))
+            first_income = incomes.first()
+
+            # 🌟 To'lov turini xavfsiz o'qib olamiz (Eski chala ma'lumotlar bo'lsa portlamaydi)
+            p_type_name = first_income.payment_type.name if first_income and first_income.payment_type else "-"
+            p_type_id = first_income.payment_type.id if first_income and first_income.payment_type else None
 
             products = []
-
             for income in incomes:
                 products.append({
-                    "product": income.product.name,
+                    "product": income.product.name if income.product else "Mahsulot o'chirilgan",
                     "quantity": income.quantity,
                     "price": income.price
                 })
 
             result.append({
                 "check_number": number,
-                # "payment_type": payment_type,
-                "supplier": incomes.first().supplier.name,
-                "date": incomes.first().created_at,
+                # 🌟 MANA SHU IKKITA QATORNI QO'SHTIK:
+                "payment_type": p_type_name,  # Masalan: "Naqd", "Karta"
+                "payment_type_id": p_type_id,  # Masalan: 1, 2
+                "supplier": first_income.supplier.name if first_income and first_income.supplier else "-",
+                "date": first_income.created_at if first_income else None,
                 "total_quantity": total['total_sum'],
                 "products": products
             })
 
         return Response(result)
+
+    # -------------------------------------------------------------
+    # 🌟 Bitta aniq chek raqami yuborilgandagi qismi:
     incomes = WarehouseIncome.objects.filter(check_number=check_number)
     if not incomes.exists():
         return Response({"error": "Kirim chek topilmadi"}, status=404)
+
     total = incomes.aggregate(total_sum=Sum('quantity'))
+    first_income = incomes.first()
+
+    # 🌟 Bu yerda ham to'lov turini xavfsiz o'qib olamiz
+    p_type_name = first_income.payment_type.name if first_income and first_income.payment_type else "-"
+    p_type_id = first_income.payment_type.id if first_income and first_income.payment_type else None
+
     products = []
     for income in incomes:
         products.append({
-            "product": income.product.name,
+            "product": income.product.name if income.product else "Mahsulot o'chirilgan",
             "quantity": income.quantity,
             "price": income.price
         })
 
-
-
     return Response({
         "check_number": check_number,
-        "supplier": incomes.first().supplier.name,
-        "date": incomes.first().created_at,
+        # 🌟 BU YERGA HAM QO'SHTIK:
+        "payment_type": p_type_name,
+        "payment_type_id": p_type_id,
+        "supplier": first_income.supplier.name if first_income and first_income.supplier else "-",
+        "date": first_income.created_at if first_income else None,
         "total_quantity": total['total_sum'],
         "products": products
     })
-
-
 
 # real foydani hisoblash uchun api
 @api_view(['GET'])

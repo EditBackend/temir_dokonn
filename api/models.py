@@ -221,6 +221,8 @@ class Product(models.Model):
     def __str__(self):
         return self.name if self.name else "Nomsiz mahsulot"
 
+
+
 class WarehouseIncome(models.Model):
 
 
@@ -282,14 +284,14 @@ class WarehouseIncome(models.Model):
         if is_new and self.payment_type:
             p_type_name = self.payment_type.name.lower()
 
-            # 🔥 Agar to'lov turi Nasiya bo'lsa - Ta'minotchi qarzini oshiramiz
+            #  Agar to'lov turi Nasiya bo'lsa - Ta'minotchi qarzini oshiramiz
             if 'nasiya' in p_type_name:
                 if self.supplier:
                     self.supplier.debt += self.total_price
                     self.supplier.total_debt += self.total_price
                     self.supplier.save()
 
-            # 🔥 Agar Naqd yoki Karta bo'lsa - srazu Xarajat (Dashboard)ga yoziladi
+            #  Agar Naqd yoki Karta bo'lsa - srazu Xarajat (Dashboard)ga yoziladi
             else:
                 category, _ = ExpenseCategory.objects.get_or_create(name="Ombor kirimi uchun")
                 expense_payment_type = 'card' if 'kart' in p_type_name else 'cash'
@@ -323,6 +325,8 @@ class WarehouseIncome(models.Model):
     def __str__(self):
         product_name = self.product.name if self.product else "Mahsulot yo'q"
         return f"{product_name} - {self.quantity}"
+
+
 
 class Batch(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="batches")
