@@ -834,6 +834,8 @@ def income_check_details(request, check_number=None):
             "price": income.price
         })
 
+
+
     return Response({
         "check_number": check_number,
         "supplier": incomes.first().supplier.name,
