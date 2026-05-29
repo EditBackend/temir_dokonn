@@ -837,7 +837,7 @@ def income_check_details(request, check_number=None):
     total = incomes.aggregate(total_sum=Sum('quantity'))
     first_income = incomes.first()
 
-    # 🌟 Bu yerda ham to'lov turini xavfsiz o'qib olamiz
+    #  Bu yerda ham to'lov turini xavfsiz o'qib olamiz
     p_type_name = first_income.payment_type.name if first_income and first_income.payment_type else "-"
     p_type_id = first_income.payment_type.id if first_income and first_income.payment_type else None
 
@@ -851,7 +851,7 @@ def income_check_details(request, check_number=None):
 
     return Response({
         "check_number": check_number,
-        # 🌟 BU YERGA HAM QO'SHTIK:
+        #  BU YERGA HAM QO'SHTIK:
         "payment_type": p_type_name,
         "payment_type_id": p_type_id,
         "supplier": first_income.supplier.name if first_income and first_income.supplier else "-",

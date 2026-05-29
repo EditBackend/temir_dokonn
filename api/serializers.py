@@ -18,11 +18,11 @@ class RoleSerializer(serializers.ModelSerializer):
 
 #  Xodimlar uchun to'g'rilangan serializer
 class EmployeeCreateSerializer(serializers.ModelSerializer):
-    role_name = serializers.CharField(source='role.name', read_only=True, default="-")
+    # read_only=True ni olib tashlaymiz, lekin faqat ma'lumot qaytayotganda ko'rinishi uchun default qoldiramiz
+    role_name = serializers.CharField(source='role.name', required=False, default="-")
 
     class Meta:
         model = Employee
-        # 🔥 role_name ro'yxatga qo'shildi! Endi frontendga roli matn ko'rinishida boradi.
         fields = ['id', 'login', 'first_name', 'last_name', 'phone', 'is_active', 'role', 'role_name']
         extra_kwargs = {
             'password': {'write_only': True, 'required': False},
@@ -30,18 +30,36 @@ class EmployeeCreateSerializer(serializers.ModelSerializer):
         }
 
     def validate(self, attrs):
-        # Frontenddan kelayotgan rolni tekshirish
+        # 1. Frontenddan kelgan Role ID yoki Role Name'ni tekshiramiz
         role_id = self.initial_data.get('role')
-        if isinstance(role_id, dict):
-            role_id = role_id.get('id')
+        role_name_input = self.initial_data.get('role_name')
 
+        from .models import Role
+
+        # Variant A: Agar frontendchi Rol ID yuborgan bo'lsa
         if role_id:
+            if isinstance(role_id, dict):
+                role_id = role_id.get('id')
             try:
                 attrs['role'] = Role.objects.get(id=int(role_id))
             except (Role.DoesNotExist, ValueError, TypeError):
                 raise serializers.ValidationError({"role": "Bunday Rol ID topilmadi."})
-        return attrs
 
+        # Variant B: Agar frontendchi Rol NOMINI (role_name) yuborgan bo'lsa
+        elif role_name_input:
+            try:
+                # Bazadan nomiga qarab (katta-kichik harfga qaramasdan iexact bilan) qidiramiz
+                role_obj = Role.objects.filter(name__iexact=str(role_name_input).strip()).first()
+                if role_obj:
+                    attrs['role'] = role_obj
+                else:
+                    # Agar u yozgan nomli rol bazada bo'lmasa, yangi rol ochib ketamiz (ixtiyoriy)
+                    role_obj = Role.objects.create(name=str(role_name_input).strip())
+                    attrs['role'] = role_obj
+            except Exception as e:
+                raise serializers.ValidationError({"role_name": "Rolni biriktirishda xatolik."})
+
+        return attrs
 EmployeeSerializer = EmployeeCreateSerializer
 
 
