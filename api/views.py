@@ -1018,6 +1018,7 @@ def cash_flow_daily(request):
     })
 
 
+
 # CATEGORY BREAKDOWN
 @api_view(['GET'])
 def expense_categories(request):
