@@ -724,42 +724,53 @@ def create_income(request):
                     product.supplier_id = supplier_id
                 product.save()
                 # =================================================================
-                #  PULLARNI HISOBLASH MANTIQLARI (To'g'rilangan variant)
+                #  PULLARNI HISOBLASH MANTIQLARI (MUTLAQ XAVFSIZ VARIANT)
                 # =================================================================
 
-                if 'nasiya' in p_type_name:
-                    # 1. Oxirgi qarz - bu faqatgina mana shu joriy chekning summasi bo'lishi kerak!
-                    # (Eski qarzga qo'shilmaydi, shuning uchun shunchaki '=' belgisini qo'yamiz)
-                    supplier.debt = chek_umumiy_summasi  # Natija: 5 000 000 bo'ladi
+    if 'nasiya' in p_type_name:
+        # 1. Oxirgi qarz - joriy chek summasi
+        supplier.debt = chek_umumiy_summasi
+        supplier.save()  # Avval buni saqlaymiz
 
-                    # 2. Jami qarz - bu eski jami qarz ustiga yangi chek summasining qo'shilganidir.
-                    # (Bu yerda '+=' to'g'ri, chunki jami qarz yig'ilib boradi)
-                    supplier.total_debt += chek_umumiy_summasi  # Natija: 15 000 + 5 000 000 = 5 015 000
+        # 2. Jami qarzni xavfsiz hisoblash:
+        # Ta'minotchining bazadagi barcha 'Nasiya' bo'lgan kirimlarini qaytadan hisoblab chiqamiz.
+        # Shunda frontend 2 marta so'rov yuborgan taqdirda ham, faqat bazadagi bor cheklar yig'indisi chiqadi.
 
-                    supplier.save()
 
-                # B) Naqd yoki Karta bo'lsa - Dashboardga Xarajat qilib yozamiz
-                else:
-                    category, _ = ExpenseCategory.objects.get_or_create(name="Ombor kirimi uchun")
-                    expense_payment_type = 'card' if 'kart' in p_type_name else 'cash'
+         # Diqqat: 'payment_type__name__icontains' orqali Nasiya kirimlarini filtrlaymiz
+        total_nasiya = WarehouseIncome.objects.filter(
+            supplier=supplier,
+            payment_type__name__icontains='nasiya'
+        ).aggregate(total=Sum('total_price'))['total'] or Decimal('0.00')
 
-                    Expense.objects.create(
-                        date=common_time.date(),
-                        category=category,
-                        amount=chek_umumiy_summasi,
-                        payment_type=expense_payment_type,
-                        note=f"Omborga kirim #{new_check_number}. Ta'minotchi: {supplier.name}",
-                        created_by_id=None
-                    )
+        # Jami qarzni bazadan hisoblangan aniq summaga tenglashtiramiz (+= EMAS, = ISHLATAMIZ!)
+        supplier.total_debt = total_nasiya
+        supplier.save()
 
-                    # Agar naqd to'lagan bo'lsa, oxirgi qarz 0 bo'ladi (ixtiyoriy, mantiqan to'g'ri keladi)
-                    supplier.debt = Decimal('0.00')
-                    supplier.save()
-            if employee_id:
-                ActivityLog.objects.create(
-                    employee_id=employee_id,
-                    action=f"{new_check_number}-sonli chek bilan omborga kirim qildi"
-                )
+    # B) Naqd yoki Karta bo'lsa
+    else:
+        category, _ = ExpenseCategory.objects.get_or_create(name="Ombor kirimi uchun")
+        expense_payment_type = 'card' if 'kart' in p_type_name else 'cash'
+
+        # Double-submit (ikki marta tushib qolish) oldini olish uchun tekshiruv:
+        # Agar shu sonli chek allaqachon xarajatga yozilgan bo'lsa, qayta yaratmaymiz
+        if not Expense.objects.filter(note__contains=f"#{new_check_number}").exists():
+            Expense.objects.create(
+                date=common_time.date(),
+                category=category,
+                amount=chek_umumiy_summasi,
+                payment_type=expense_payment_type,
+                note=f"Omborga kirim #{new_check_number}. Ta'minotchi: {supplier.name}",
+                created_by_id=None
+            )
+
+        supplier.debt = Decimal('0.00')
+        supplier.save()
+    if employee_id:
+        ActivityLog.objects.create(
+            employee_id=employee_id,
+            action=f"{new_check_number}-sonli chek bilan omborga kirim qildi"
+        )
 
         return Response({
             "success": True,
