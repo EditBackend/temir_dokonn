@@ -615,7 +615,7 @@ def check_details(request, check_number=None):
         return Response({"error": "Chek topilmadi"}, status=404)
 
     total = sales.aggregate(total_sum=Sum('total_price'))
-    first_sale = sales.first()  # ✅
+    first_sale = sales.first()
 
     products = []
     for sale in sales:
@@ -644,13 +644,13 @@ class SupplierViewSet(ModelViewSet):
 @csrf_exempt
 @api_view(['GET', 'POST'])
 def create_income(request):
-    # 🌟 1. Agar frontendchi dropdown uchun to'lov turlarini so'rasa:
+    #  1. Agar frontendchi dropdown uchun to'lov turlarini so'rasa:
     if request.method == 'GET':
         types = PaymentType.objects.all()
         data = [{"id": t.id, "name": t.name} for t in types]
         return Response(data)
 
-    # 🌟 2. Agar frontendchi kirimni saqlash uchun POST so'rov yuborsa:
+    #  2. Agar frontendchi kirimni saqlash uchun POST so'rov yuborsa:
     if request.method == 'POST':
         supplier_id = request.data.get("supplier")
         items = request.data.get("lines")
@@ -723,29 +723,38 @@ def create_income(request):
                 if not product.supplier_id:
                     product.supplier_id = supplier_id
                 product.save()
+                # =================================================================
+                #  PULLARNI HISOBLASH MANTIQLARI (To'g'rilangan variant)
+                # =================================================================
 
-            #  PULLARNI HISOBLASH MANTIQLARI (Chek yakunlangandan keyin 1 marta ishlaydi)
+                if 'nasiya' in p_type_name:
+                    # 1. Oxirgi qarz - bu faqatgina mana shu joriy chekning summasi bo'lishi kerak!
+                    # (Eski qarzga qo'shilmaydi, shuning uchun shunchaki '=' belgisini qo'yamiz)
+                    supplier.debt = chek_umumiy_summasi  # Natija: 5 000 000 bo'ladi
 
-            # A) Agar Nasiya bo'lsa - Ta'minotchining qarzini oshiramiz
-            if 'nasiya' in p_type_name:
-                supplier.debt += chek_umumiy_summasi
-                supplier.total_debt += chek_umumiy_summasi
-                supplier.save()
+                    # 2. Jami qarz - bu eski jami qarz ustiga yangi chek summasining qo'shilganidir.
+                    # (Bu yerda '+=' to'g'ri, chunki jami qarz yig'ilib boradi)
+                    supplier.total_debt += chek_umumiy_summasi  # Natija: 15 000 + 5 000 000 = 5 015 000
 
-            # B) Naqd yoki Karta bo'lsa - Dashboardga Xarajat qilib yozamiz
-            else:
-                category, _ = ExpenseCategory.objects.get_or_create(name="Ombor kirimi uchun")
-                expense_payment_type = 'card' if 'kart' in p_type_name else 'cash'
+                    supplier.save()
 
-                Expense.objects.create(
-                    date=common_time.date(),
-                    category=category,
-                    amount=chek_umumiy_summasi,
-                    payment_type=expense_payment_type,
-                    note=f"Omborga kirim #{new_check_number}. Ta'minotchi: {supplier.name}",
-                    created_by_id=None
-                )
+                # B) Naqd yoki Karta bo'lsa - Dashboardga Xarajat qilib yozamiz
+                else:
+                    category, _ = ExpenseCategory.objects.get_or_create(name="Ombor kirimi uchun")
+                    expense_payment_type = 'card' if 'kart' in p_type_name else 'cash'
 
+                    Expense.objects.create(
+                        date=common_time.date(),
+                        category=category,
+                        amount=chek_umumiy_summasi,
+                        payment_type=expense_payment_type,
+                        note=f"Omborga kirim #{new_check_number}. Ta'minotchi: {supplier.name}",
+                        created_by_id=None
+                    )
+
+                    # Agar naqd to'lagan bo'lsa, oxirgi qarz 0 bo'ladi (ixtiyoriy, mantiqan to'g'ri keladi)
+                    supplier.debt = Decimal('0.00')
+                    supplier.save()
             if employee_id:
                 ActivityLog.objects.create(
                     employee_id=employee_id,
@@ -761,6 +770,9 @@ def create_income(request):
                 "total_amount": float(chek_umumiy_summasi)
             }
         })
+
+
+
 #  INCOME DETAIL
 @api_view(['GET'])
 def income_check_details(request, check_number=None):
@@ -777,7 +789,7 @@ def income_check_details(request, check_number=None):
             total = incomes.aggregate(total_sum=Sum('quantity'))
             first_income = incomes.first()
 
-            # 🌟 To'lov turini xavfsiz o'qib olamiz (Eski chala ma'lumotlar bo'lsa portlamaydi)
+            #  To'lov turini xavfsiz o'qib olamiz (Eski chala ma'lumotlar bo'lsa portlamaydi)
             p_type_name = first_income.payment_type.name if first_income and first_income.payment_type else "-"
             p_type_id = first_income.payment_type.id if first_income and first_income.payment_type else None
 
