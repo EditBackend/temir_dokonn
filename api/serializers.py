@@ -16,6 +16,8 @@ class RoleSerializer(serializers.ModelSerializer):
         model = Role
         fields = "__all__"
 
+
+
 #  Xodimlar uchun to'g'rilangan serializer
 class EmployeeCreateSerializer(serializers.ModelSerializer):
     # read_only=True ni olib tashlaymiz, lekin faqat ma'lumot qaytayotganda ko'rinishi uchun default qoldiramiz

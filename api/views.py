@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework import status,viewsets
 from django.http import JsonResponse
 from django.db.models import Sum, F
-from django.db.models.functions import TruncWeek, TruncDate
+from django.db.models.functions import TruncWeek, TruncDate, TruncHour
 from django.utils.dateparse import parse_date
 # from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -72,9 +72,8 @@ class EmployeeDetailView(APIView):
 
 
 class RoleDetailView(APIView):
-    permission_classes = [AllowAny] # Frontendchi bemalol o'chira olishi uchun
+    permission_classes = [AllowAny]
 
-    # Mavjud GET metodi (agar sizda bo'lsa, o'z holicha tursin)
     def get(self, request, pk):
         try:
             role = Role.objects.get(pk=pk)
@@ -105,30 +104,13 @@ class RoleDetailView(APIView):
         except Role.DoesNotExist:
             return Response({"success": False}, status=404)
 
-    #  MANA SHU METODNI QO'SHASIZ (DELETE muammosini hal qiladi)
     def delete(self, request, pk):
         try:
             role = Role.objects.get(pk=pk)
-            role.delete() # Bazadan o'chiramiz
+            role.delete()
             return Response({"success": True, "message": "Rol muvaffaqiyatli o'chirildi"}, status=200)
         except Role.DoesNotExist:
             return Response({"success": False, "error": "Rol topilmadi"}, status=404)
-
-# User = get_user_model()
-# class IsBossOnly(permissions.BasePermission):
-#     """Faqat boshliq (boss) ko‘ra oladi/sozlay oladi."""
-#     def has_permission(self, request, view):
-#         return bool(request.user and request.user.is_authenticated and getattr(request.user, "role", None) == "boss")
-#
-
-# class EmployeeViewSet(ModelViewSet):
-#     """
-#     Xodimlar CRUD:
-#     - List/Create/Update/Delete -> faqat boss
-#     """
-#     queryset = User.objects.all().order_by("-id")
-#     serializer_class = EmployeeSerializer
-#     # permission_classes = [IsBossOnly]
 
 
 class UnitViewSet(viewsets.ModelViewSet):
@@ -168,10 +150,8 @@ def abc_xyz_analysis_optimized(request):
     product_data = defaultdict(lambda: {
         "name": "", "weekly_sales": {}, "total_revenue": 0, "total_profit": 0, "stock": 0
     })
-    #Ma'lumotlarni yig'ish
     for entry in sales_qs:
         p_id = entry['product_id']
-        # Haftani string ko'rinishida saqlaymiz, solishtirish oson bo'lishi uchun
         w_str = entry['week'].strftime('%Y-%W')
         product_data[p_id]["name"] = entry['product__name']
         product_data[p_id]["stock"] = float(entry['product__quantity'] or 0)
@@ -183,9 +163,7 @@ def abc_xyz_analysis_optimized(request):
     if total_revenue_sum == 0:
         return Response({"success": True, "message": "Sotuvlar topilmadi", "data": {}})
 
-    # ABC va XYZ hisoblash
     sorted_products = sorted(product_data.items(), key=lambda x: x[1]['total_revenue'], reverse=True)
-    # Barcha mavjud haftalar ro'yxatini tuzamiz
     all_weeks = []
     curr = start_date
     while curr <= end_date:
@@ -197,13 +175,10 @@ def abc_xyz_analysis_optimized(request):
     category_counts = {"A": 0, "B": 0, "C": 0}
     for p_id, p_info in sorted_products:
         revenue = p_info['total_revenue']
-        #ABC analiz
         percent = (revenue / total_revenue_sum) * 100
         cumulative_percent += percent
         abc = 'A' if cumulative_percent <= 80 else ('B' if cumulative_percent <= 95 else 'C')
         category_counts[abc] += 1
-
-        # XYZ  aanaliz
         sales_values = [p_info["weekly_sales"].get(w, 0) for w in all_weeks]
         variation = 1.0
         if len(sales_values) > 1:
@@ -266,7 +241,6 @@ class TopProductsView(APIView):
 
 class ProductsTableView(APIView):
     def get(self, request):
-        # Sale modelidan guruhlab olish
         qs = (
             Sale.objects.values('product__name')
             .annotate(
@@ -1007,22 +981,40 @@ def cash_flow(request):
 # CASH FLOW DAILY TABLE
 @api_view(['GET'])
 def cash_flow_daily(request):
-
-    sales = Sale.objects.annotate(
-        date=TruncDate('created_at')
-    ).values('date').annotate(
+    # 1. Savdolarni soatbay guruhlash
+    sales_query = Sale.objects.annotate(
+        hour_bucket=TruncHour('created_at')
+    ).values('hour_bucket').annotate(
         total_in=Sum('total_price')
-    )
+    ).order_by('hour_bucket')
 
-    incomes = WarehouseIncome.objects.annotate(
-        date=TruncDate('created_at')
-    ).values('date').annotate(
+    # 2. Xarajatlarni (Kirimlar) soatbay guruhlash
+    incomes_query = WarehouseIncome.objects.annotate(
+        hour_bucket=TruncHour('created_at')
+    ).values('hour_bucket').annotate(
         total_out=Sum('total_price')
-    )
+    ).order_by('hour_bucket')
+
+    # Frontend uchun sanani "YYYY-MM-DD HH:MM" ko'rinishida formatlaymiz
+    sales_data = [
+        {
+            "date": item['hour_bucket'].strftime("%Y-%m-%d %H:%M") if item['hour_bucket'] else "Noma'lum",
+            "total_in": float(item['total_in']) if item['total_in'] else 0.0
+        }
+        for item in sales_query
+    ]
+
+    incomes_data = [
+        {
+            "date": item['hour_bucket'].strftime("%Y-%m-%d %H:%M") if item['hour_bucket'] else "Noma'lum",
+            "total_out": float(item['total_out']) if item['total_out'] else 0.0
+        }
+        for item in incomes_query
+    ]
 
     return Response({
-        "sales": sales,
-        "expenses": incomes
+        "sales": sales_data,
+        "expenses": incomes_data
     })
 
 
@@ -1484,3 +1476,16 @@ def debtor_detail(request, customer_id):
             ]
         }
     })
+
+
+
+
+
+
+
+
+
+
+
+
+
