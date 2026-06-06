@@ -412,33 +412,49 @@ class CategoryViewSet(ModelViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
 
-    def perform_destroy(self, instance):
-        ArchivedItem.objects.create(
-            item_type='category',  # Turi kategoriya
-            name=instance.name,  # Kategoriya nomi
-            original_id=instance.id,
-            status="O'chirilgan"
-        )
-        instance.delete()
+def destroy(self, request, *args, **kwargs):
+    instance = self.get_object()
+
+    # 1. Object o'chishidan oldin arxivlanadi
+    ArchivedItem.objects.create(
+        item_type='category',
+        name=instance.name,
+        original_id=instance.id,
+        status="O'chirilgan"
+    )
+
+    # 2. Keyin o'chiriladi
+    instance.delete()
+
+    return Response({"message": "Kategoriya o'chirildi va arxivlandi"}, status=status.HTTP_204_NO_CONTENT)
 
 class ProductViewSet(ModelViewSet):
     serializer_class = ProductSerializer
+
     def get_queryset(self):
         queryset = Product.objects.all()
         category_id = self.request.query_params.get("category")
         if category_id:
             queryset = queryset.filter(category_id=category_id)
         return queryset
-#  ENG TAGIDAN SHU METODNI QO'SHING
-    def perform_destroy(self, instance):
-        from .models import ArchivedItem
-        ArchivedItem.objects.create(
-            item_type='product',         # Turi mahsulot
-            name=instance.name,          # Mahsulot nomi
-            original_id=instance.id,
-            status="O'chirilgan"
-        )
-        instance.delete()
+
+
+def destroy(self, request, *args, **kwargs):
+    instance = self.get_object()  # O'chirilmoqchi bo'lgan obyektni olamiz
+
+    # 1. Object delete qilinishidan oldin Archive modelga save qilinadi
+    ArchivedItem.objects.create(
+        item_type='product',
+        name=instance.name,
+        original_id=instance.id,
+        status="O'chirilgan"
+    )
+
+    # 2. Keyin object delete qilinadi
+    instance.delete()
+
+    # Frontendga muvaffaqiyatli o'chganini bildiramiz
+    return Response({"message": "Mahsulot o'chirildi va arxivlandi"}, status=status.HTTP_204_NO_CONTENT)
 
 class SaleViewSet(ModelViewSet):
     queryset = Sale.objects.all().order_by('-created_at')
@@ -669,18 +685,23 @@ def check_details(request, check_number=None):
 class SupplierViewSet(ModelViewSet):
     queryset = Supplier.objects.all()
     serializer_class = SupplierSerializer
-# SHU METODNI QO'SHASIZ (O'chirish tugmasi bosilganda ishlaydi)
-    def perform_destroy(self, instance):
-        # O'chib ketishidan oldin arxivga yozamiz
-        ArchivedItem.objects.create(
-            item_type='supplier',
-            name=instance.name,
-            original_id=instance.id,
-            status="O'chirilgan"
-        )
-        # Keyin bazadan o'chiramiz
-        instance.delete()
 
+
+def destroy(self, request, *args, **kwargs):
+    instance = self.get_object()
+
+    # 1. Object o'chishidan oldin arxivlanadi
+    ArchivedItem.objects.create(
+        item_type='supplier',
+        name=instance.name,
+        original_id=instance.id,
+        status="O'chirilgan"
+    )
+
+    # 2. Keyin o'chiriladi
+    instance.delete()
+
+    return Response({"message": "Ta'minotchi o'chirildi va arxivlandi"}, status=status.HTTP_204_NO_CONTENT)
 
 #  INCOME CREATE & GET PAYMENT TYPES
 @csrf_exempt
