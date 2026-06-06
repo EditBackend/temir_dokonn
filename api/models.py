@@ -505,6 +505,8 @@ class ArchivedItem(models.Model):
         ('product', 'Mahsulot'),
         ('category', 'Kategoriya'),
         ('employee', 'Xodim'),
+        ('customer', 'Mijoz'),  #  yangi qo'shildi
+        ('role', 'Rol'),  #  yangi qo'shildi
     ]
 
     item_type = models.CharField(max_length=50, choices=ITEM_TYPES, verbose_name="Tur")
