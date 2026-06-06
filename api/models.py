@@ -496,3 +496,22 @@ class Payment(models.Model):
 
     def __str__(self):
         return f"{self.customer} - {self.amount} ({self.date})"
+
+
+
+class ArchivedItem(models.Model):
+    ITEM_TYPES = [
+        ('supplier', 'Ta\'minotchi'),
+        ('product', 'Mahsulot'),
+        ('category', 'Kategoriya'),
+        ('employee', 'Xodim'),
+    ]
+
+    item_type = models.CharField(max_length=50, choices=ITEM_TYPES, verbose_name="Tur")
+    name = models.CharField(max_length=255, verbose_name="Nomi")
+    deleted_at = models.DateTimeField(auto_now_add=True, verbose_name="Sana")
+    status = models.CharField(max_length=50, default="O'chirilgan", verbose_name="Status")
+    original_id = models.IntegerField(null=True, blank=True)  # Qaysi ID li obyekt o'chgani
+
+    def __str__(self):
+        return f"{self.get_item_type_display()} - {self.name}"

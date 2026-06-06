@@ -25,7 +25,7 @@ from dateutil.relativedelta import relativedelta
 from rest_framework import generics
 
 from .models import Product, Sale, Category, Supplier, WarehouseIncome, Customer, Employee, Role, ActivityLog, Batch, \
-    Expense, SaleItem, ExpenseCategory, Payment, SaleItem, Product, Unit, PaymentType
+    Expense, SaleItem, ExpenseCategory, Payment, SaleItem, Product, Unit, PaymentType,ArchivedItem
 from .serializers import (
     ExpenseCreateSerializer,
     ProductSerializer,
@@ -39,6 +39,20 @@ from .serializers import (
     BatchSerializer, ExpenseSerializer, ExpenseCreateSerializer,
     UnitSerializer
 )
+
+@api_view(['GET'])
+def archive_list(request):
+    archives = ArchivedItem.objects.order_by('-deleted_at')
+    data = [
+        {
+            "tur": item.get_item_type_display(), # 'Ta'minotchi' deb o'zbekcha chiqadi
+            "nomi": item.name,
+            "sana": item.deleted_at.strftime("%Y-%m-%d %H:%M"),
+            "status": item.status
+        }
+        for item in archives
+    ]
+    return Response(data)
 
 
 # EMPLOYEE DETAIL (GET, PATCH, DELETE uchun)
@@ -398,6 +412,14 @@ class CategoryViewSet(ModelViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
 
+    def perform_destroy(self, instance):
+        ArchivedItem.objects.create(
+            item_type='category',  # Turi kategoriya
+            name=instance.name,  # Kategoriya nomi
+            original_id=instance.id,
+            status="O'chirilgan"
+        )
+        instance.delete()
 
 class ProductViewSet(ModelViewSet):
     serializer_class = ProductSerializer
@@ -407,7 +429,16 @@ class ProductViewSet(ModelViewSet):
         if category_id:
             queryset = queryset.filter(category_id=category_id)
         return queryset
-
+#  ENG TAGIDAN SHU METODNI QO'SHING
+    def perform_destroy(self, instance):
+        from .models import ArchivedItem
+        ArchivedItem.objects.create(
+            item_type='product',         # Turi mahsulot
+            name=instance.name,          # Mahsulot nomi
+            original_id=instance.id,
+            status="O'chirilgan"
+        )
+        instance.delete()
 
 class SaleViewSet(ModelViewSet):
     queryset = Sale.objects.all().order_by('-created_at')
@@ -586,7 +617,7 @@ def check_details(request, check_number=None):
 
             total = sales.aggregate(total_sum=Sum('total_price'))
 
-            first_sale = sales.first()  # ✅ bir marta olamiz
+            first_sale = sales.first()  #  bir marta olamiz
 
             products = []
             for sale in sales:
@@ -629,7 +660,7 @@ def check_details(request, check_number=None):
 
     return Response({
         "check_number": check_number,
-        "customer": CustomerSerializer(first_sale.customer).data,  # ✅ FIX
+        "customer": CustomerSerializer(first_sale.customer).data,  #  FIX
         "date": first_sale.created_at,
         "total_sum": total['total_sum'],
         "products": products
@@ -638,6 +669,17 @@ def check_details(request, check_number=None):
 class SupplierViewSet(ModelViewSet):
     queryset = Supplier.objects.all()
     serializer_class = SupplierSerializer
+# SHU METODNI QO'SHASIZ (O'chirish tugmasi bosilganda ishlaydi)
+    def perform_destroy(self, instance):
+        # O'chib ketishidan oldin arxivga yozamiz
+        ArchivedItem.objects.create(
+            item_type='supplier',
+            name=instance.name,
+            original_id=instance.id,
+            status="O'chirilgan"
+        )
+        # Keyin bazadan o'chiramiz
+        instance.delete()
 
 
 #  INCOME CREATE & GET PAYMENT TYPES
@@ -813,7 +855,7 @@ def income_check_details(request, check_number=None):
 
             result.append({
                 "check_number": number,
-                # 🌟 MANA SHU IKKITA QATORNI QO'SHTIK:
+                # MANA SHU IKKITA QATORNI QO'SHTIK:
                 "payment_type": p_type_name,  # Masalan: "Naqd", "Karta"
                 "payment_type_id": p_type_id,  # Masalan: 1, 2
                 "supplier": first_income.supplier.name if first_income and first_income.supplier else "-",
@@ -825,7 +867,7 @@ def income_check_details(request, check_number=None):
         return Response(result)
 
     # -------------------------------------------------------------
-    # 🌟 Bitta aniq chek raqami yuborilgandagi qismi:
+    #  Bitta aniq chek raqami yuborilgandagi qismi:
     incomes = WarehouseIncome.objects.filter(check_number=check_number)
     if not incomes.exists():
         return Response({"error": "Kirim chek topilmadi"}, status=404)
@@ -919,11 +961,25 @@ class EmployeeViewSet(ModelViewSet):
     queryset = Employee.objects.all().order_by("-id")
     serializer_class = EmployeeSerializer
 
+    def perform_destroy(self, instance):
+
+        # Xodimning ismi odatda 'first_name', 'username' yoki 'name' bo'ladi, modelizga qarab o'zgartiring:
+        emp_name = getattr(instance, 'name', getattr(instance, 'first_name', str(instance)))
+
+        ArchivedItem.objects.create(
+            item_type='employee',  # Turi xodim
+            name=emp_name,
+            original_id=instance.id,
+            status="O'chirilgan"
+        )
+        instance.delete()
+
 
 # ROLE uchun crud amallari
 class RoleViewSet(ModelViewSet):
     queryset = Role.objects.all()
     serializer_class = RoleSerializer
+
 
 
 
