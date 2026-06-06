@@ -159,9 +159,8 @@ class PaymentType(models.Model):
 class Supplier(models.Model):
     name = models.CharField(max_length=255)
     phone = models.CharField(max_length=50)
-
-
-    # SHU IKKI QATORNI QO'SHING:
+    boss_name = models.CharField(max_length=255, null=True, blank=True, verbose_name="Boshliq ismi")
+    address = models.TextField(null=True, blank=True, verbose_name="Manzil")
     debt = models.DecimalField(max_digits=12, decimal_places=2, default=0)  # Oxirgi qarzlar uchun
     total_debt = models.DecimalField(max_digits=12, decimal_places=2, default=0)  # Jami qarzimiz
 

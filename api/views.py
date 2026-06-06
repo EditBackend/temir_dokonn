@@ -723,10 +723,9 @@ def create_income(request):
                 if not product.supplier_id:
                     product.supplier_id = supplier_id
                 product.save()
-                # =================================================================
-                #  PULLARNI HISOBLASH MANTIQLARI (MUTLAQ XAVFSIZ VARIANT)
-                # =================================================================
-
+# =================================================================
+#  PULLARNI HISOBLASH MANTIQLARI (MUTLAQ XAVFSIZ VARIANT)
+# =================================================================
     if 'nasiya' in p_type_name:
         # 1. Oxirgi qarz - joriy chek summasi
         supplier.debt = chek_umumiy_summasi

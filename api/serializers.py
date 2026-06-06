@@ -114,7 +114,7 @@ class CategorySerializer(serializers.ModelSerializer):
 class SupplierSerializer(serializers.ModelSerializer):
     class Meta:
         model = Supplier
-        fields = ['id', 'name', 'phone', 'debt', 'total_debt']
+        fields = ['id', 'name', 'phone', 'debt', 'total_debt','boss_name','address']
 
 
 # class ProductSerializer(serializers.ModelSerializer):
