@@ -646,11 +646,8 @@ def new_check_number(request):
     return Response({"new_check_number": new_check})
 
 
-
-
 @api_view(['GET'])
 def check_details(request, check_number=None):
-
     if check_number is None:
         checks = Sale.objects.values('check_number').distinct().order_by('-check_number')
         result = []
@@ -660,30 +657,37 @@ def check_details(request, check_number=None):
             sales = Sale.objects.filter(check_number=number)
 
             total = sales.aggregate(total_sum=Sum('total_price'))
-
-            first_sale = sales.first()  #  bir marta olamiz
+            first_sale = sales.first()
 
             products = []
             for sale in sales:
+                # 👇 XAVFSIZLIK: Agar mahsulot o'chib ketgan bo'lsa xato bermaydi
+                product_name = sale.product.name if sale.product else "O'chirilgan mahsulot"
+
                 products.append({
-                    "product": sale.product.name,
+                    "product": product_name,
                     "quantity": sale.quantity,
                     "price": sale.price,
                     "total": sale.total_price,
-                    "payment_type": sale.payment_type
+                    "payment_type": sale.payment_type.name if hasattr(sale.payment_type, 'name') else str(
+                        sale.payment_type)
                 })
+
+            # XAVFSIZLIK: Mijoz o'chib ketgan bo'lsa ham xato bermasligi uchun tekshiruv
+            customer_data = CustomerSerializer(first_sale.customer).data if first_sale.customer else {
+                "name": "O'chirilgan mijoz"}
 
             result.append({
                 "check_number": number,
-                "customer": CustomerSerializer(first_sale.customer).data,  # ✅ FIX
-                "date": first_sale.created_at,
-                "total_sum": total['total_sum'],
+                "customer": customer_data,
+                "date": first_sale.created_at if first_sale else None,
+                "total_sum": total['total_sum'] or 0,
                 "products": products
             })
 
         return Response(result)
 
-    # Bitta check uchun
+    # Bitta chek ma'lumotlarini olish qismi
     sales = Sale.objects.filter(check_number=check_number)
 
     if not sales.exists():
@@ -694,19 +698,26 @@ def check_details(request, check_number=None):
 
     products = []
     for sale in sales:
+        #  XAVFSIZLIK: Bu yerda ham mahsulot o'chgan bo'lsa xavfsiz nom beriladi
+        product_name = sale.product.name if sale.product else "O'chirilgan mahsulot"
+
         products.append({
-            "product": sale.product.name,
+            "product": product_name,
             "quantity": sale.quantity,
             "price": sale.price,
             "total": sale.total_price,
-            "payment_type": sale.payment_type
+            "payment_type": sale.payment_type.name if hasattr(sale.payment_type, 'name') else str(sale.payment_type)
         })
+
+    # XAVFSIZLIK: Mijoz uchun tekshiruv
+    customer_data = CustomerSerializer(first_sale.customer).data if first_sale.customer else {
+        "name": "O'chirilgan mijoz"}
 
     return Response({
         "check_number": check_number,
-        "customer": CustomerSerializer(first_sale.customer).data,  #FIX
-        "date": first_sale.created_at,
-        "total_sum": total['total_sum'],
+        "customer": customer_data,
+        "date": first_sale.created_at if first_sale else None,
+        "total_sum": total['total_sum'] or 0,
         "products": products
     })
 
