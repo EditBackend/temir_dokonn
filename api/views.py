@@ -78,11 +78,17 @@ class EmployeeDetailView(APIView):
         return Response(serializer.errors, status=400)
 
     def delete(self, request, pk):
-        employee = self.get_object(pk)
-        if not employee: return Response(status=404)
+        employee = get_object_or_404(Employee, pk=pk)
+        # Xodim ismini olish (agar name bo'lsa name, bo'lmasa first_name yoki str)
+        emp_name = getattr(employee, 'name', getattr(employee, 'first_name', str(employee)))
+        ArchivedItem.objects.create(
+            item_type='employee',
+            name=emp_name,
+            original_id=employee.id,
+            status="O'chirilgan"
+        )
         employee.delete()
-        return Response(status=204)
-
+        return Response({"message": "Xodim o'chirildi va arxivlandi"}, status=status.HTTP_204_NO_CONTENT)
 
 
 class RoleDetailView(APIView):
@@ -118,25 +124,32 @@ class RoleDetailView(APIView):
         except Role.DoesNotExist:
             return Response({"success": False}, status=404)
 
+    #  Ikkita delete birlashtirildi, avval arxivga saqlaydi, keyin o'chiradi
     def delete(self, request, pk):
         try:
             role = Role.objects.get(pk=pk)
+
+            # 1. Object delete qilinishidan oldin Archive modelga save qilinadi
+            ArchivedItem.objects.create(
+                item_type='role',
+                name=role.name,
+                original_id=role.id,
+                status="O'chirilgan"
+            )
+
+            # 2. Keyin object delete qilinadi
             role.delete()
-            return Response({"success": True, "message": "Rol muvaffaqiyatli o'chirildi"}, status=200)
+
+            return Response({
+                "success": True,
+                "message": "Rol muvaffaqiyatli o'chirildi va arxivlandi"
+            }, status=status.HTTP_200_OK)
+
         except Role.DoesNotExist:
-            return Response({"success": False, "error": "Rol topilmadi"}, status=404)
-
-    def delete(self, request, pk):
-        role = get_object_or_404(Role, pk=pk)
-        ArchivedItem.objects.create(
-            item_type='role',
-            name=role.name,
-            original_id=role.id,
-            status="O'chirilgan"
-        )
-        role.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
+            return Response({
+                "success": False,
+                "error": "Rol topilmadi"
+            }, status=status.HTTP_404_NOT_FOUND)
 class UnitViewSet(viewsets.ModelViewSet):
     queryset = Unit.objects.all()
     serializer_class = UnitSerializer
@@ -416,16 +429,16 @@ class CustomerViewSet(ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
-        from .models import ArchivedItem
-
         ArchivedItem.objects.create(
-            item_type='customer',  # Agar models.py dagi ITEM_TYPES ga 'customer' qo'shmagan bo'lsangiz, qo'shib qo'ying
-            name=instance.name,  # Mijoz ismi (name yoki full_name bo'lishi mumkin)
+            item_type='customer',
+            name=instance.name,  # Mijozning ismi saqlangan maydon
             original_id=instance.id,
             status="O'chirilgan"
         )
         instance.delete()
         return Response({"message": "Mijoz o'chirildi va arxivlandi"}, status=status.HTTP_204_NO_CONTENT)
+
+
 def home(request):
     return JsonResponse({"message": "Temir dokon Backendda muammo yo'q.Chunki Backendchi yaxshi bola!"})
 
@@ -434,21 +447,18 @@ class CategoryViewSet(ModelViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
 
+
 def destroy(self, request, *args, **kwargs):
     instance = self.get_object()
-
-    # 1. Object o'chishidan oldin arxivlanadi
     ArchivedItem.objects.create(
         item_type='category',
         name=instance.name,
         original_id=instance.id,
         status="O'chirilgan"
     )
-
-    # 2. Keyin o'chiriladi
     instance.delete()
-
     return Response({"message": "Kategoriya o'chirildi va arxivlandi"}, status=status.HTTP_204_NO_CONTENT)
+
 
 class ProductViewSet(ModelViewSet):
     serializer_class = ProductSerializer
@@ -463,15 +473,14 @@ class ProductViewSet(ModelViewSet):
 
 def destroy(self, request, *args, **kwargs):
     instance = self.get_object()
-
-
+    # O'chishdan oldin arxivga yozamiz
     ArchivedItem.objects.create(
         item_type='product',
-        name=instance.name,  # modeldagi maydon nomi (masalan: name)
+        name=instance.name,  # Agar mahsulot nomi boshqa maydonda bo'lsa, o'shani yozing
         original_id=instance.id,
         status="O'chirilgan"
     )
-    instance.delete()
+    instance.delete()  # Keyin o'chiramiz
     return Response({"message": "Mahsulot o'chirildi va arxivlandi"}, status=status.HTTP_204_NO_CONTENT)
 
 
