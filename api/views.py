@@ -274,6 +274,30 @@ class UnitViewSet(viewsets.ModelViewSet):
     queryset = Unit.objects.all()
     serializer_class = UnitSerializer
 
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        from .models import ArchivedItem
+        from django.db.models.deletion import ProtectedError
+
+        obj_name = getattr(instance, 'name', getattr(instance, 'title', str(instance)))
+
+        try:
+            ArchivedItem.objects.create(
+                item_type='measure',  # models.py dagi ITEM_TYPES ga 'measure' deb qo'shib qo'ysangiz ham bo'ladi
+                name=obj_name,
+                original_id=instance.id,
+                status="O'chirilgan"
+            )
+            instance.delete()
+            return Response({"success": True, "message": "O'lchov o'chirildi va arxivlandi"}, status=200)
+
+        except ProtectedError:
+            return Response({
+                "success": False,
+                "error": "Bu o'lchov birligiga bog'langan mahsulotlar bor! Uni o'chirish taqiqlangan."
+            }, status=400)
+        except Exception as e:
+            return Response({"success": False, "error": str(e)}, status=400)
 #abc analiz
 @api_view(['GET'])
 def abc_xyz_analysis_optimized(request):
@@ -574,16 +598,31 @@ class CategoryViewSet(ModelViewSet):
 
 def destroy(self, request, *args, **kwargs):
     instance = self.get_object()
-    ArchivedItem.objects.create(
-        item_type='category',
-        name=instance.name,
-        original_id=instance.id,
-        status="O'chirilgan"
-    )
-    instance.delete()
-    return Response({"message": "Kategoriya o'chirildi va arxivlandi"}, status=status.HTTP_204_NO_CONTENT)
+    from .models import ArchivedItem
+    from django.db.models.deletion import ProtectedError
 
+    # Model maydonini xavfsiz aniqlab olish (name, title yoki str)
+    obj_name = getattr(instance, 'name', getattr(instance, 'title', str(instance)))
 
+    try:
+        # . Avval arxivga saqlaymiz
+        ArchivedItem.objects.create(
+            item_type='category',
+            name=obj_name,
+            original_id=instance.id,
+            status="O'chirilgan"
+        )
+        # 2. Keyin o'chiramiz
+        instance.delete()
+        return Response({"success": True, "message": "Kategoriya o'chirildi va arxivlandi"}, status=200)
+
+    except ProtectedError:
+        return Response({
+            "success": False,
+            "error": "Bu kategoriyaga bog'liq mahsulotlar bor! Avval o'sha mahsulotlarni o'chiring yoki boshqa kategoriyaga o'tkazing."
+        }, status=400)
+    except Exception as e:
+        return Response({"success": False, "error": str(e)}, status=400)
 class ProductViewSet(ModelViewSet):
     serializer_class = ProductSerializer
 
@@ -594,23 +633,30 @@ class ProductViewSet(ModelViewSet):
             queryset = queryset.filter(category_id=category_id)
         return queryset
 
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        from .models import ArchivedItem
+        from django.db.models.deletion import ProtectedError
 
-def destroy(self, request, *args, **kwargs):
-    instance = self.get_object()
-    from .models import ArchivedItem  #  Ichida import qilish xavfsiz
+        obj_name = getattr(instance, 'name', getattr(instance, 'title', str(instance)))
 
-    # Ustun nomi 'name' yoki 'title' bo'lishi mumkinligini tekshiramiz
-    obj_name = getattr(instance, 'name', getattr(instance, 'title', str(instance)))
+        try:
+            ArchivedItem.objects.create(
+                item_type='product',
+                name=obj_name,
+                original_id=instance.id,
+                status="O'chirilgan"
+            )
+            instance.delete()
+            return Response({"success": True, "message": "Mahsulot o'chirildi va arxivlandi"}, status=200)
 
-    ArchivedItem.objects.create(
-        item_type='product',
-        name=obj_name,
-        original_id=instance.id,
-        status="O'chirilgan"
-    )
-    instance.delete()
-    return Response({"success": True, "message": "Mahsulot arxivlandi"},status=200)  #  200 qaytarish frontendga qulay
-
+        except ProtectedError:
+            return Response({
+                "success": False,
+                "error": "Bu mahsulot savdo cheklari (sotuvlar) yoki ombor kirimlariga bog'langan! Shuning uchun butunlay o'chirish mumkin emas."
+            }, status=400)
+        except Exception as e:
+            return Response({"success": False, "error": str(e)}, status=400)
 
 class SaleViewSet(ModelViewSet):
     queryset = Sale.objects.all().order_by('-created_at')
