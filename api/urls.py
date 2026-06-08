@@ -1,6 +1,7 @@
 from django.urls import path,include
 from rest_framework.routers import DefaultRouter
-from .views import UnitViewSet, RoleDetailView, archive_list  # Buni views.py da yozganmiz
+from .views import UnitViewSet, RoleDetailView, archive_list, customer_profile_details, \
+    receive_customer_payment  # Buni views.py da yozganmiz
 from .views import (
     ProductViewSet,
     SaleViewSet,
@@ -231,6 +232,10 @@ urlpatterns = [
 #  Frontendchi qidirayotgan grafik yo'lagini dashboard ichidagi tayyor funksiyaga ulab qo'yamiz
     path('api/cash-flow/trend/', DashboardViewSet.as_view({'get': 'cash_flow'})),
     path('archive/', archive_list),
+
+    # urls.py ichiga qo'shing:
+    path('customers/<int:customer_id>/profile/', customer_profile_details, name='customer-profile'),
+    path('customers/<int:customer_id>/pay/', receive_customer_payment, name='customer-pay'),
 ]
 
 #  MUHIM

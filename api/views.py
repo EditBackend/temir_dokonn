@@ -25,7 +25,7 @@ from dateutil.relativedelta import relativedelta
 from rest_framework import generics
 
 from .models import Product, Sale, Category, Supplier, WarehouseIncome, Customer, Employee, Role, ActivityLog, Batch, \
-    Expense, SaleItem, ExpenseCategory, Payment, SaleItem, Product, Unit, PaymentType,ArchivedItem
+    Expense, SaleItem, ExpenseCategory, Payment, SaleItem, Product, Unit, PaymentType,ArchivedItem,CustomerPayment
 from .serializers import (
     ExpenseCreateSerializer,
     ProductSerializer,
@@ -39,6 +39,118 @@ from .serializers import (
     BatchSerializer, ExpenseSerializer, ExpenseCreateSerializer,
     UnitSerializer
 )
+
+
+@api_view(['POST'])
+def receive_customer_payment(request, customer_id):
+    """
+    Mijozdan qarzni uzish uchun to'lov qabul qilish API
+    """
+    try:
+        customer = Customer.objects.get(pk=customer_id)
+    except Customer.DoesNotExist:
+        return Response({"success": False, "error": "Mijoz topilmadi"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Frontenddan kelayotgan ma'lumotlar
+    amount_str = request.data.get('amount')  # Masalan: 2000000
+    payment_type = request.data.get('payment_type')  # naqd, karta, click
+
+    if not amount_str or Decimal(amount_str) <= 0:
+        return Response({"success": False, "error": "Noto'g'ri summa kiritildi"}, status=status.HTTP_400_BAD_REQUEST)
+
+    payment_amount = Decimal(amount_str)
+
+    # 1. Matematika: Mijozning umumiy qarzidan olib kelgan pulini ayiramiz
+    if customer.total_debt >= payment_amount:
+        customer.total_debt -= payment_amount
+    else:
+        # Agar mijoz qarzidan ko'p pul olib kelsa, qarzni 0 qilib qo'yamiz
+        customer.total_debt = Decimal('0.00')
+
+    # Oxirgi tranzaksiya qarzini ham mos ravishda yangilaymiz
+    if customer.debt >= payment_amount:
+        customer.debt -= payment_amount
+    else:
+        customer.debt = Decimal('0.00')
+
+    customer.save()
+
+    # 2. To'lovlar tarixiga saqlab qo'yamiz (Frontend pastdagi ro'yxatda ko'rishi uchun)
+    CustomerPayment.objects.create(
+        customer=customer,
+        amount=payment_amount,
+        payment_type=payment_type
+    )
+
+    # 3. Kassa (Activity log) ga yozamiz (Xohlasangiz umumiy kassaga ham qo'shib yuborishingiz mumkin)
+    from .models import ActivityLog
+    ActivityLog.objects.create(
+        action=f"Mijoz {customer.name} {payment_amount} so'm qarzini uzdi. To'lov turi: {payment_type}"
+    )
+
+    return Response({
+        "success": True,
+        "message": "To'lov muvaffaqiyatli qabul qilindi",
+        "new_total_debt": customer.total_debt,
+        "new_debt": customer.debt
+    }, status=status.HTTP_200_OK)
+
+
+
+@api_view(['GET'])
+def customer_profile_details(request, customer_id):
+    """
+    Mijoz profilidagi barcha ma'lumotlarni bitta joyda berish API
+    """
+    try:
+        customer = Customer.objects.get(pk=customer_id)
+    except Customer.DoesNotExist:
+        return Response({"success": False, "error": "Mijoz topilmadi"}, status=404)
+
+    # To'lovlar tarixini olamiz
+    payments = customer.customer_debt_payments.all().order_by('-created_at')
+    payments_data = [
+        {
+            "id": p.id,
+            "amount": p.amount,
+            "payment_type": p.get_payment_type_display(),
+            "date": p.created_at.strftime("%Y-%m-%d %H:%M")
+        } for p in payments
+    ]
+
+    # Xaridlar tarixini olamiz (Agar sizda Sale modelida mijoz bog'langan bo'lsa)
+    # Eslatma: Sale modelida customer fieldi bo'lishi kerak
+    from .models import Sale
+    sales = Sale.objects.filter(customer=customer).order_by('-created_at')
+    sales_data = [
+        {
+            "id": s.id,
+            "product": s.product.name if s.product else "O'chirilgan mahsulot",
+            "quantity": s.quantity,
+            "total_price": s.total_price,
+            "date": s.created_at.strftime("%Y-%m-%d %H:%M")
+        } for s in sales
+    ]
+
+    return Response({
+        "success": True,
+        "profile": {
+            "id": customer.id,
+            "name": customer.name,
+            "phone": customer.phone,
+            "address": customer.address or "Kiritilmagan",
+            "last_debt": customer.debt,          # Oxirgi tranzaksiya qarzi
+            "total_debt": customer.total_debt,    # Umumiy balans (Yig'ilgan qarz)
+        },
+        "purchases": sales_data,                  # Xaridlar oynasi uchun
+        "payments": payments_data                 # To'lovlar oynasi uchun
+    })
+
+
+
+
+
+
 
 @api_view(['GET'])
 def archive_list(request):
@@ -78,9 +190,11 @@ class EmployeeDetailView(APIView):
         return Response(serializer.errors, status=400)
 
     def delete(self, request, pk):
+        from .models import ArchivedItem, Employee  #  Employee modelingiz nomini aniq yozing
+        from django.shortcuts import get_object_or_404
         employee = get_object_or_404(Employee, pk=pk)
-        # Xodim ismini olish (agar name bo'lsa name, bo'lmasa first_name yoki str)
-        emp_name = getattr(employee, 'name', getattr(employee, 'first_name', str(employee)))
+        # Xodim ismi 'name', 'first_name' yoki 'username' bo'lishi mumkin
+        emp_name = getattr(employee, 'name',getattr(employee, 'first_name', getattr(employee, 'username', str(employee))))
         ArchivedItem.objects.create(
             item_type='employee',
             name=emp_name,
@@ -88,7 +202,7 @@ class EmployeeDetailView(APIView):
             status="O'chirilgan"
         )
         employee.delete()
-        return Response({"message": "Xodim o'chirildi va arxivlandi"}, status=status.HTTP_204_NO_CONTENT)
+        return Response({"success": True, "message": "Xodim arxivlandi"}, status=200)
 
 
 class RoleDetailView(APIView):
@@ -423,20 +537,24 @@ class BatchViewSet(viewsets.ModelViewSet):
 
         return Response(serializer.data)
 
+
 class CustomerViewSet(ModelViewSet):
     queryset = Customer.objects.all().order_by("-id")
     serializer_class = CustomerSerializer
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
+        from .models import ArchivedItem
+        # Mijoz ismi modelda 'name', 'full_name' yoki 'first_name' bo'lishi mumkin
+        obj_name = getattr(instance, 'name',getattr(instance, 'full_name', getattr(instance, 'first_name', str(instance))))
         ArchivedItem.objects.create(
             item_type='customer',
-            name=instance.name,  # Mijozning ismi saqlangan maydon
+            name=obj_name,
             original_id=instance.id,
             status="O'chirilgan"
         )
         instance.delete()
-        return Response({"message": "Mijoz o'chirildi va arxivlandi"}, status=status.HTTP_204_NO_CONTENT)
+        return Response({"success": True, "message": "Mijoz arxivlandi"}, status=200)
 
 
 def home(request):
@@ -473,15 +591,19 @@ class ProductViewSet(ModelViewSet):
 
 def destroy(self, request, *args, **kwargs):
     instance = self.get_object()
-    # O'chishdan oldin arxivga yozamiz
+    from .models import ArchivedItem  #  Ichida import qilish xavfsiz
+
+    # Ustun nomi 'name' yoki 'title' bo'lishi mumkinligini tekshiramiz
+    obj_name = getattr(instance, 'name', getattr(instance, 'title', str(instance)))
+
     ArchivedItem.objects.create(
         item_type='product',
-        name=instance.name,  # Agar mahsulot nomi boshqa maydonda bo'lsa, o'shani yozing
+        name=obj_name,
         original_id=instance.id,
         status="O'chirilgan"
     )
-    instance.delete()  # Keyin o'chiramiz
-    return Response({"message": "Mahsulot o'chirildi va arxivlandi"}, status=status.HTTP_204_NO_CONTENT)
+    instance.delete()
+    return Response({"success": True, "message": "Mahsulot arxivlandi"},status=200)  #  200 qaytarish frontendga qulay
 
 
 class SaleViewSet(ModelViewSet):

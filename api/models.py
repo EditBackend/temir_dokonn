@@ -124,7 +124,6 @@ class Customer(models.Model):
     last_name = models.CharField(max_length=80)
     phone = models.CharField(max_length=20, unique=True)
     address = models.CharField(max_length=255, blank=True, null=True)
-
     debt = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     total_debt = models.DecimalField(max_digits=20, decimal_places=2, default=0.00)
     score = models.IntegerField(default=10)
@@ -132,7 +131,22 @@ class Customer(models.Model):
     updated_at = models.DateTimeField(auto_now=True)  # Har safar save() bo'lganda yangilanadi
     def __str__(self):
         return f"{self.first_name} {self.last_name} ({self.phone})"
+# models.py ichida CustomerPayment modelini toping va mana shunga almashtiring:
 
+class CustomerPayment(models.Model):
+    PAYMENT_METHODS = [
+        ('cash', 'Naqd'),
+        ('card', 'Karta'),
+        ('click', 'Click'),
+    ]
+    # 👇 related_name o'zgartirildi: 'payments' o'rniga 'customer_debt_payments' qilindi
+    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='customer_debt_payments')
+    amount = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="To'lov summasi")
+    payment_type = models.CharField(max_length=20, choices=PAYMENT_METHODS, default='cash')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="To'lov sanasi")
+
+    def __str__(self):
+        return f"{self.customer.name} - {self.amount} so'm"
 
 
 class Category(models.Model):
