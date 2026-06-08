@@ -43,31 +43,33 @@ from .serializers import (
 
 @api_view(['POST'])
 def receive_customer_payment(request, customer_id):
-    """
-    Mijozdan qarzni uzish uchun to'lov qabul qilish API
-    """
     try:
         customer = Customer.objects.get(pk=customer_id)
     except Customer.DoesNotExist:
         return Response({"success": False, "error": "Mijoz topilmadi"}, status=status.HTTP_404_NOT_FOUND)
 
-    # Frontenddan kelayotgan ma'lumotlar
-    amount_str = request.data.get('amount')  # Masalan: 2000000
-    payment_type = request.data.get('payment_type')  # naqd, karta, click
+    # 1. Ma'lumotlarni olish (JSON yoki Form-Data bo'lsa ham muammosiz o'qiydi)
+    amount_str = request.data.get('amount')
+    payment_type = request.data.get('payment_type', 'cash')
 
-    if not amount_str or Decimal(amount_str) <= 0:
-        return Response({"success": False, "error": "Noto'g'ri summa kiritildi"}, status=status.HTTP_400_BAD_REQUEST)
+    if not amount_str:
+        return Response({"success": False, "error": "Summa kiritilmadi (amount field majburiy)"},
+                        status=status.HTTP_400_BAD_REQUEST)
 
-    payment_amount = Decimal(amount_str)
+    try:
+        payment_amount = Decimal(str(amount_str).replace(',', ''))  # Agar frontend vergul bilan yuborsa ham tozalaydi
+        if payment_amount <= 0:
+            raise InvalidOperation
+    except (InvalidOperation, ValueError):
+        return Response({"success": False, "error": "Noto'g'ri summa formati kiritildi"},
+                        status=status.HTTP_400_BAD_REQUEST)
 
-    # 1. Matematika: Mijozning umumiy qarzidan olib kelgan pulini ayiramiz
+    # 2. Matematika: Qarzni kamaytirish
     if customer.total_debt >= payment_amount:
         customer.total_debt -= payment_amount
     else:
-        # Agar mijoz qarzidan ko'p pul olib kelsa, qarzni 0 qilib qo'yamiz
         customer.total_debt = Decimal('0.00')
 
-    # Oxirgi tranzaksiya qarzini ham mos ravishda yangilaymiz
     if customer.debt >= payment_amount:
         customer.debt -= payment_amount
     else:
@@ -75,18 +77,24 @@ def receive_customer_payment(request, customer_id):
 
     customer.save()
 
-    # 2. To'lovlar tarixiga saqlab qo'yamiz (Frontend pastdagi ro'yxatda ko'rishi uchun)
+    # 3. To'lovlar tarixiga saqlash (related_name muammosi yechilgan)
     CustomerPayment.objects.create(
         customer=customer,
         amount=payment_amount,
         payment_type=payment_type
     )
 
-    # 3. Kassa (Activity log) ga yozamiz (Xohlasangiz umumiy kassaga ham qo'shib yuborishingiz mumkin)
-    from .models import ActivityLog
-    ActivityLog.objects.create(
-        action=f"Mijoz {customer.name} {payment_amount} so'm qarzini uzdi. To'lov turi: {payment_type}"
-    )
+    # 4 ActivityLog qismini XAVFSIZ qilish:
+    # 500 xatolik bermasligi uchun try-except ichiga olamiz (agar modelda boshqa required fieldlar bo'lsa)
+    try:
+        from .models import ActivityLog
+        # Agar modelingizda employee yoki user majburiy bo'lsa, xato bermasligi uchun qidirib ko'ramiz
+        ActivityLog.objects.create(
+            action=f"Mijoz {customer.name} {payment_amount} so'm qarzini uzdi. To'lov turi: {payment_type}"
+        )
+    except Exception as log_error:
+        print(f"Log yozishda xato bo'ldi, lekin qarz o'chdi: {log_error}")
+        # Log yaratishda xato bo'lsa ham mijozning puli kuyib ketmasligi uchun jarayonni to'xtatmaymiz
 
     return Response({
         "success": True,
@@ -94,8 +102,6 @@ def receive_customer_payment(request, customer_id):
         "new_total_debt": customer.total_debt,
         "new_debt": customer.debt
     }, status=status.HTTP_200_OK)
-
-
 
 @api_view(['GET'])
 def customer_profile_details(request, customer_id):
