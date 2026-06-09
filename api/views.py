@@ -642,7 +642,7 @@ class ProductViewSet(ModelViewSet):
         obj_name = getattr(instance, 'name', getattr(instance, 'title', str(instance)))
 
         try:
-            # Tranzaksiya ochamiz: agar o'chirish o'xshasa, arxiv ham bazada qoladi. O'xshamasab, ikkalasi ham bekor bo'ladi.
+            # Tranzaksiya ochamiz agar o'chirish o'xshasa, arxiv ham bazada qoladi. O'xshamasab, ikkalasi ham bekor bo'ladi.
             with transaction.atomic():
                 # 1. Arxivga yozamiz
                 ArchivedItem.objects.create(
@@ -651,7 +651,7 @@ class ProductViewSet(ModelViewSet):
                     original_id=instance.id,
                     status="O'chirilgan"
                 )
-                # 2. Standart DRF o'chirish metodini chaqiramiz (Bu avtomat 204 No Content qaytaradi)
+                #Standart DRF o'chirish metodini chaqiramiz (Bu avtomat 204 No Content qaytaradi)
                 return super().destroy(request, *args, **kwargs)
 
         except ProtectedError:
@@ -902,28 +902,42 @@ def check_details(request, check_number=None):
         "products": products
     })
 
+
 class SupplierViewSet(ModelViewSet):
     queryset = Supplier.objects.all()
     serializer_class = SupplierSerializer
 
+    # KLAS ICHIDA: destroy metodini xavfsiz override qilamiz
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
 
-def destroy(self, request, *args, **kwargs):
-    instance = self.get_object()
+        # Ismini xavfsiz olish (name yoki kompaniya nomi bo'lsa ham)
+        obj_name = getattr(instance, 'name', getattr(instance, 'company_name', str(instance)))
 
-    # 1. Object o'chishidan oldin arxivlanadi
-    ArchivedItem.objects.create(
-        item_type='supplier',
-        name=instance.name,
-        original_id=instance.id,
-        status="O'chirilgan"
-    )
+        try:
+            # Atomik tranzaksiya: agar o'chsa arxivda qoladi, o'chmasa hammasi bekor bo'ladi
+            with transaction.atomic():
+                # 1. Object o'chishidan oldin arxivlanadi
+                ArchivedItem.objects.create(
+                    item_type='supplier',
+                    name=obj_name,
+                    original_id=instance.id,
+                    status="O'chirilgan"
+                )
 
-    #Keyin o'chiriladi
-    instance.delete()
+                # 2. Standart yo'l bilan o'chiriladi (Frontend kutgan 204 statusini qaytaradi)
+                return super().destroy(request, *args, **kwargs)
 
-    return Response({"message": "Ta'minotchi o'chirildi va arxivlandi"}, status=status.HTTP_204_NO_CONTENT)
+        except ProtectedError:
+            # Agar ta'minotchi qayergadir bog'langan bo'lsa, xato bermay tushuntiradi
+            return Response({
+                "success": False,
+                "error": "Bu ta'minotchiga bog'langan mahsulotlar yoki kirim hujjatlari bor! Shuning uchun uni o'chirish taqiqlanadi."
+            }, status=status.HTTP_400_BAD_REQUEST)
 
-#  INCOME CREATE & GET PAYMENT TYPES
+        except Exception as e:
+            return Response({"success": False, "error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            #  INCOME CREATE & GET PAYMENT TYPES
 @csrf_exempt
 @api_view(['GET', 'POST'])
 def create_income(request):
