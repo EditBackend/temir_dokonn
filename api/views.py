@@ -937,7 +937,10 @@ class SupplierViewSet(ModelViewSet):
 
         except Exception as e:
             return Response({"success": False, "error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-            #  INCOME CREATE & GET PAYMENT TYPES
+            #  INCOME CREATE & GET PAYMENT TYPEs
+
+
+
 @csrf_exempt
 @api_view(['GET', 'POST'])
 def create_income(request):
@@ -1062,21 +1065,22 @@ def create_income(request):
 
         supplier.debt = Decimal('0.00')
         supplier.save()
+
     if employee_id:
         ActivityLog.objects.create(
             employee_id=employee_id,
             action=f"{new_check_number}-sonli chek bilan omborga kirim qildi"
         )
 
-        return Response({
-            "success": True,
-            "message": "Kirim muvaffaqiyatli saqlandi",
-            "data": {
-                "check_number": new_check_number,
-                "items_count": len(items),
-                "total_amount": float(chek_umumiy_summasi)
-            }
-        })
+    return Response({
+        "success": True,
+        "message": "Kirim muvaffaqiyatli saqlandi",
+        "data": {
+            "check_number": new_check_number,
+            "items_count": len(items),
+            "total_amount": float(chek_umumiy_summasi)
+        }
+    })
 
 
 
