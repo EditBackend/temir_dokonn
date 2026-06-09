@@ -595,34 +595,35 @@ class CategoryViewSet(ModelViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
 
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        from .models import ArchivedItem
 
-def destroy(self, request, *args, **kwargs):
-    instance = self.get_object()
-    from .models import ArchivedItem
-    from django.db.models.deletion import ProtectedError
+        # Model maydonini xavfsiz aniqlab olish
+        obj_name = getattr(instance, 'name', getattr(instance, 'title', str(instance)))
 
-    # Model maydonini xavfsiz aniqlab olish (name, title yoki str)
-    obj_name = getattr(instance, 'name', getattr(instance, 'title', str(instance)))
+        try:
+            # 1. O'chishdan oldin arxiv modeliga yozamiz
+            ArchivedItem.objects.create(
+                item_type='category',
+                name=obj_name,
+                original_id=instance.id,
+                status="O'chirilgan"
+            )
 
-    try:
-        # . Avval arxivga saqlaymiz
-        ArchivedItem.objects.create(
-            item_type='category',
-            name=obj_name,
-            original_id=instance.id,
-            status="O'chirilgan"
-        )
-        # 2. Keyin o'chiramiz
-        instance.delete()
-        return Response({"success": True, "message": "Kategoriya o'chirildi va arxivlandi"}, status=200)
+            # 2. Standart DRF o'chirish funksiyasini chaqiramiz (Bu avtomat 204 qaytaradi)
+            return super().destroy(request, *args, **kwargs)
 
-    except ProtectedError:
-        return Response({
-            "success": False,
-            "error": "Bu kategoriyaga bog'liq mahsulotlar bor! Avval o'sha mahsulotlarni o'chiring yoki boshqa kategoriyaga o'tkazing."
-        }, status=400)
-    except Exception as e:
-        return Response({"success": False, "error": str(e)}, status=400)
+        except ProtectedError:
+            return Response({
+                "success": False,
+                "error": "Bu kategoriyaga bog'liq mahsulotlar bor! Avval o'sha mahsulotlarni o'chiring."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"success": False, "error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+
 class ProductViewSet(ModelViewSet):
     serializer_class = ProductSerializer
 
@@ -633,30 +634,36 @@ class ProductViewSet(ModelViewSet):
             queryset = queryset.filter(category_id=category_id)
         return queryset
 
+    #  TUZATILGAN VA SUG'URTALANGAN DESTROY METODI
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
         from .models import ArchivedItem
-        from django.db.models.deletion import ProtectedError
 
         obj_name = getattr(instance, 'name', getattr(instance, 'title', str(instance)))
 
         try:
-            ArchivedItem.objects.create(
-                item_type='product',
-                name=obj_name,
-                original_id=instance.id,
-                status="O'chirilgan"
-            )
-            instance.delete()
-            return Response({"success": True, "message": "Mahsulot o'chirildi va arxivlandi"}, status=200)
+            # Tranzaksiya ochamiz: agar o'chirish o'xshasa, arxiv ham bazada qoladi. O'xshamasab, ikkalasi ham bekor bo'ladi.
+            with transaction.atomic():
+                # 1. Arxivga yozamiz
+                ArchivedItem.objects.create(
+                    item_type='product',
+                    name=obj_name,
+                    original_id=instance.id,
+                    status="O'chirilgan"
+                )
+                # 2. Standart DRF o'chirish metodini chaqiramiz (Bu avtomat 204 No Content qaytaradi)
+                return super().destroy(request, *args, **kwargs)
 
         except ProtectedError:
+            # Agar mahsulot savdoda qatnashgan bo'lsa, frontendga chiroyli ogohlantirish beramiz
             return Response({
                 "success": False,
-                "error": "Bu mahsulot savdo cheklari (sotuvlar) yoki ombor kirimlariga bog'langan! Shuning uchun butunlay o'chirish mumkin emas."
-            }, status=400)
+                "error": "Bu mahsulot savdo cheklari (sotuvlar) yoki ombor kirimlariga bog'langan! Shuning uchun uni o'chirib bo'lmaydi."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
         except Exception as e:
-            return Response({"success": False, "error": str(e)}, status=400)
+            return Response({"success": False, "error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 class SaleViewSet(ModelViewSet):
     queryset = Sale.objects.all().order_by('-created_at')
