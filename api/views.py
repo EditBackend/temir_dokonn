@@ -1232,19 +1232,50 @@ class EmployeeViewSet(ModelViewSet):
 class RoleViewSet(ModelViewSet):
     queryset = Role.objects.all()
     serializer_class = RoleSerializer
-
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
-        from .models import ArchivedItem
+        try:
+            with transaction.atomic():
+                ArchivedItem.objects.create(
+                    item_type='role',
+                    name=instance.name,
+                    original_id=instance.id,
+                    status="O'chirilgan"
+                )
+                return super().destroy(request, *args, **kwargs)
+        except ProtectedError:
+            return Response({
+                "success": False,
+                "error": "Bu lavozimga biriktirilgan xodimlar (employees) bor! Avval ularni boshqa lavozimga o'tkazing."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"success": False, "error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    @action(detail=True, methods=['post'], url_path='save-permissions')
+    def save_permissions(self, request, pk=None):
+        role = self.get_object()
+        permissions_data = request.data.get('permissions', [])
 
-        ArchivedItem.objects.create(
-            item_type='role',  # Buni ham models.py dagi ITEM_TYPES listiga qo'shib qo'ying
-            name=instance.name,
-            original_id=instance.id,
-            status="O'chirilgan"
-        )
-        instance.delete()
-        return Response({"message": "Rol o'chirildi va arxivlandi"}, status=status.HTTP_204_NO_CONTENT)
+        try:
+            with transaction.atomic():
+                for perm in permissions_data:
+                    page_id = perm.get('page_id')
+                    if not page_id:
+                        continue
+                    RolePermission.objects.update_or_create(
+                        role=role,
+                        page_id=page_id,
+                        defaults={
+                            'can_view': perm.get('can_view', False),
+                            'can_create': perm.get('can_create', False),
+                            'can_edit': perm.get('can_edit', False),
+                            'can_delete': perm.get('can_delete', False),
+                        }
+                    )
+            return Response({"success": True, "message": "Lavozim huquqlari muvaffaqiyatli saqlandi!"},
+                            status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"success": False, "error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 # CASH FLOW (kunlik / oylik pul oqimi)

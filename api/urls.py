@@ -46,11 +46,14 @@ from .views import (
 
 )
 
-#  ROUTER
+
+
+
+
 router = DefaultRouter()
 router.register(r'dashboard', DashboardViewSet, basename='dashboard')
-router.register(r'units', UnitViewSet) # Bu avtomatik CRUD yo'llarini yaratadi
-
+router.register(r'units', UnitViewSet)
+router.register(r'roles', RoleViewSet, basename='role')
 #  Expense ViewSet
 expense_list = ExpenseViewSet.as_view({
     'get': 'list',
@@ -156,13 +159,13 @@ urlpatterns = [
     path('login/', login_employee),
 
 
-    # ROLES
-    path('roles/', RoleViewSet.as_view({
-        'get': 'list',
-        'post': 'create'
-    })),
-
-    path('roles/<int:pk>/', RoleDetailView.as_view(), name='role-detail'),
+    # # ROLES
+    # path('roles/', RoleViewSet.as_view({
+    #     'get': 'list',
+    #     'post': 'create'
+    # })),
+    #
+    # path('roles/<int:pk>/', RoleDetailView.as_view(), name='role-detail'),
     # as_manager emas, as_view bo'ladi!
     # EMPLOYEES
     path('employees/', EmployeeViewSet.as_view({

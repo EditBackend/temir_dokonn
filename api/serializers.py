@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from datetime import datetime
-from .models import Product, Sale, Category, Supplier, WarehouseIncome, Customer, Role, Employee, Batch, Expense, ExpenseCategory, Unit
+from .models import Product, Sale, Category, Supplier, WarehouseIncome, Customer, Role, Employee, Batch, Expense, ExpenseCategory, Unit,AppPage,RolePermission
 
 User = get_user_model()
 
@@ -15,6 +15,29 @@ class RoleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Role
         fields = "__all__"
+
+
+class AppPageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AppPage
+        fields = '__all__'
+
+
+class RolePermissionSerializer(serializers.ModelSerializer):
+    page_name = serializers.CharField(source='page.name', read_only=True)
+
+    class Meta:
+        model = RolePermission
+        fields = ['id', 'page', 'page_name', 'can_view', 'can_create', 'can_edit', 'can_delete']
+
+
+class RoleSerializer(serializers.ModelSerializer):
+    permissions = RolePermissionSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Role
+        fields = ['id', 'name', 'permissions']
+
 
 
 
@@ -84,7 +107,7 @@ class ProductSerializer(serializers.ModelSerializer):
 
     # class Meta:
     #     model = Product
-    #     # 🔥 fields-ga aniq yozib qo'yamiz, shunda ID-lar bilan birga NOM-lar ham chiroyli ketadi
+    #     #  fields-ga aniq yozib qo'yamiz, shunda ID-lar bilan birga NOM-lar ham chiroyli ketadi
     #     fields = [
     #         'id', 'name', 'price', 'last_price', 'quantity', 'comment',
     #         'supplier', 'supplier_name', 'category', 'category_name',
