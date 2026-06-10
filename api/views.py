@@ -1,5 +1,4 @@
 from datetime import timedelta
-from decimal import Decimal
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.decorators import api_view,action
 from rest_framework.response import Response
@@ -23,7 +22,7 @@ from rest_framework.permissions import AllowAny
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from rest_framework import generics
-
+from .models import Role, AppPage, RolePermission
 from .models import Product, Sale, Category, Supplier, WarehouseIncome, Customer, Employee, Role, ActivityLog, Batch, \
     Expense, SaleItem, ExpenseCategory, Payment, SaleItem, Product, Unit, PaymentType,ArchivedItem,CustomerPayment
 from .serializers import (
@@ -48,7 +47,7 @@ def receive_customer_payment(request, customer_id):
     except Customer.DoesNotExist:
         return Response({"success": False, "error": "Mijoz topilmadi"}, status=status.HTTP_404_NOT_FOUND)
 
-    # 1. Ma'lumotlarni olish (JSON yoki Form-Data bo'lsa ham muammosiz o'qiydi)
+    # Ma'lumotlarni olish (JSON yoki Form-Data bo'lsa ham muammosiz o'qiydi)
     amount_str = request.data.get('amount')
     payment_type = request.data.get('payment_type', 'cash')
 
@@ -944,13 +943,13 @@ class SupplierViewSet(ModelViewSet):
 @csrf_exempt
 @api_view(['GET', 'POST'])
 def create_income(request):
-    #  1. Agar frontendchi dropdown uchun to'lov turlarini so'rasa:
+    #   Agar frontendchi dropdown uchun to'lov turlarini so'rasa:
     if request.method == 'GET':
         types = PaymentType.objects.all()
         data = [{"id": t.id, "name": t.name} for t in types]
         return Response(data)
 
-    #  2. Agar frontendchi kirimni saqlash uchun POST so'rov yuborsa:
+    #  Agar frontendchi kirimni saqlash uchun POST so'rov yuborsa:
     if request.method == 'POST':
         supplier_id = request.data.get("supplier")
         items = request.data.get("lines")
@@ -1023,9 +1022,11 @@ def create_income(request):
                 if not product.supplier_id:
                     product.supplier_id = supplier_id
                 product.save()
-# =================================================================
+
+
 #  PULLARNI HISOBLASH MANTIQLARI (MUTLAQ XAVFSIZ VARIANT)
-# =================================================================
+
+
     if 'nasiya' in p_type_name:
         # 1. Oxirgi qarz - joriy chek summasi
         supplier.debt = chek_umumiy_summasi
@@ -1114,19 +1115,17 @@ def income_check_details(request, check_number=None):
 
             result.append({
                 "check_number": number,
-                # MANA SHU IKKITA QATORNI QO'SHTIK:
-                "payment_type": p_type_name,  # Masalan: "Naqd", "Karta"
-                "payment_type_id": p_type_id,  # Masalan: 1, 2
+
+                "payment_type": p_type_name,
+                "payment_type_id": p_type_id,
                 "supplier": first_income.supplier.name if first_income and first_income.supplier else "-",
                 "date": first_income.created_at if first_income else None,
                 "total_quantity": total['total_sum'],
                 "products": products
             })
-
         return Response(result)
 
-    # -------------------------------------------------------------
-    #  Bitta aniq chek raqami yuborilgandagi qismi:
+    #  Bitta aniq chek raqami yuborilgandagi qismi
     incomes = WarehouseIncome.objects.filter(check_number=check_number)
     if not incomes.exists():
         return Response({"error": "Kirim chek topilmadi"}, status=404)
@@ -1134,7 +1133,6 @@ def income_check_details(request, check_number=None):
     total = incomes.aggregate(total_sum=Sum('quantity'))
     first_income = incomes.first()
 
-    #  Bu yerda ham to'lov turini xavfsiz o'qib olamiz
     p_type_name = first_income.payment_type.name if first_income and first_income.payment_type else "-"
     p_type_id = first_income.payment_type.id if first_income and first_income.payment_type else None
 
@@ -1148,7 +1146,6 @@ def income_check_details(request, check_number=None):
 
     return Response({
         "check_number": check_number,
-        #  BU YERGA HAM QO'SHTIK:
         "payment_type": p_type_name,
         "payment_type_id": p_type_id,
         "supplier": first_income.supplier.name if first_income and first_income.supplier else "-",
@@ -1199,7 +1196,6 @@ def login_employee(request):
 
     phone = request.data.get("phone")
     password = request.data.get("password")
-
     try:
         employee = Employee.objects.get(phone=phone, password=password)
     except Employee.DoesNotExist:
@@ -1207,7 +1203,6 @@ def login_employee(request):
             {"error": "Login yoki parol noto'g'ri"},
             status=400
         )
-
     return Response({
         "id": employee.id,
         "name": employee.first_name,
@@ -1830,8 +1825,44 @@ def debtor_detail(request, customer_id):
 
 
 
-
-
+@api_view(['GET', 'POST'])
+def role_permissions_management(request, role_id):
+    try:
+        role = Role.objects.get(pk=role_id)
+    except Role.DoesNotExist:
+        return Response({"success": False, "error": "Lavozim topilmadi"}, status=404)
+    if request.method == 'GET':
+        pages = AppPage.objects.all()
+        result = []
+        for page in pages:
+            perm, created = RolePermission.objects.get_or_create(role=role, page=page)
+            result.append({
+                "page_id": page.id,
+                "page_name": page.name,
+                "can_view": perm.can_view,
+                "can_create": perm.can_create,
+                "can_edit": perm.can_edit,
+                "can_delete": perm.can_delete
+            })
+        return Response({
+            "success": True,
+            "role_name": role.name,
+            "permissions": result
+        })
+    elif request.method == 'POST':
+        permissions_list = request.data.get('permissions', [])
+        for perm_data in permissions_list:
+            page_id = perm_data.get('page_id')
+            try:
+                perm_obj = RolePermission.objects.get(role=role, page_id=page_id)
+                perm_obj.can_view = perm_data.get('can_view', False)
+                perm_obj.can_create = perm_data.get('can_create', False)
+                perm_obj.can_edit = perm_data.get('can_edit', False)
+                perm_obj.can_delete = perm_data.get('can_delete', False)
+                perm_obj.save()
+            except RolePermission.DoesNotExist:
+                continue
+        return Response({"success": True, "message": "Lavozim huquqlari muvaffaqiyatli saqlandi"}, status=200)
 
 
 

@@ -1,16 +1,41 @@
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+
+
+class AppPage(models.Model):
+    name = models.CharField(max_length=100, verbose_name="Sahifa nomi")
+    codename = models.CharField(max_length=100, unique=True,verbose_name="Tizim uchun qisqa nomi")
+
+    def __str__(self):
+        return self.name
+
+
+class RolePermission(models.Model):
+    role = models.ForeignKey('Role', on_delete=models.CASCADE, related_name='permissions')
+    page = models.ForeignKey(AppPage, on_delete=models.CASCADE, related_name='page_permissions')
+    can_view = models.BooleanField(default=False, verbose_name="Ko'rish")
+    can_create = models.BooleanField(default=False, verbose_name="Yaratish")
+    can_edit = models.BooleanField(default=False, verbose_name="Tahrirlash")
+    can_delete = models.BooleanField(default=False, verbose_name="O'chirish")
+
+    class Meta:
+        unique_together = ('role', 'page')
+
+    def __str__(self):
+        return f"{self.role.name} - {self.page.name} huquqlari"
+
 User = get_user_model()
 class Branch(models.Model):
-    name = models.CharField(max_length=100)  # filial nomi
-    address = models.TextField(blank=True, null=True)  # manzil
+    name = models.CharField(max_length=100)
+    address = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.name
-#boshliq uchun expences oynasi
+
+
 class ExpenseCategory(models.Model):
     name = models.CharField(max_length=255)
 
@@ -37,24 +62,11 @@ class Expense(models.Model):
 
 
 class Role(models.Model):
-    """
-    Lavozim modeli.
-    Masalan:
-    Egasi
-    Sotuvchi
-    Omborchi
-    ishlovchi
-    va hokazo
-    """
-
-
     name = models.CharField(max_length=50)
-
-    # Har bir rolga ruxsatlar beramiz
-    can_sell = models.BooleanField(default=False)       # sotish mumkinmi
-    can_income = models.BooleanField(default=False)     # kirim qilish mumkinmi
-    can_view_reports = models.BooleanField(default=False) # hisobot ko'rish mumkinmi
-    can_manage_users = models.BooleanField(default=False) # xodim qo'shish mumkinmi
+    can_sell = models.BooleanField(default=False)
+    can_income = models.BooleanField(default=False)
+    can_view_reports = models.BooleanField(default=False)
+    can_manage_users = models.BooleanField(default=False)
 
     def __str__(self):
         return self.name
@@ -62,12 +74,6 @@ class Role(models.Model):
 
 
 class Employee(models.Model):
-    """
-    Xodim modeli
-    Telefon bu login
-    password bu parol
-    role bu lavozim
-    """
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
     login = models.CharField(max_length=150, unique=True, null=True, blank=True)
@@ -139,7 +145,7 @@ class CustomerPayment(models.Model):
         ('card', 'Karta'),
         ('click', 'Click'),
     ]
-    # 👇 related_name o'zgartirildi: 'payments' o'rniga 'customer_debt_payments' qilindi
+    #  related_name o'zgartirildi: 'payments' o'rniga 'customer_debt_payments' qilindi
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='customer_debt_payments')
     amount = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="To'lov summasi")
     payment_type = models.CharField(max_length=20, choices=PAYMENT_METHODS, default='cash')
