@@ -1629,7 +1629,7 @@ class DashboardViewSet(viewsets.ViewSet):
                 "growth_percent": round(growth_percent, 2)
             }
         })
-    # 2. KIRIM-CHIQIM (CASH FLOW)
+#KIRIM-CHIQIM (CASH FLOW)
     @action(detail=False, methods=['get'], url_path='cash-flow')
     def cash_flow(self, request):
         sana_from = request.GET.get('date_from')
@@ -1640,32 +1640,37 @@ class DashboardViewSet(viewsets.ViewSet):
             sales = sales.filter(created_at__date__range=[sana_from, sana_to])
             expenses = expenses.filter(date__range=[sana_from, sana_to])
         cat_expenses = expenses.values('category__name').annotate(total=Sum('amount'))
-        # Grafik trendi
-        trend_data = sales.annotate(day=TruncDate('created_at')).values('day').annotate(
+        trend_query = sales.annotate(day=TruncDate('created_at')).values('day').annotate(
             kirim=Sum('total_price')).order_by('day')
+        formatted_trend = []
+        for item in trend_query:
+            day_str = str(item['day']) if item['day'] else ""
+            kirim_val = float(item['kirim']) if item['kirim'] else 0.0
+            formatted_trend.append({
+                "day": day_str,
+                "kirim": kirim_val,
+                "date": day_str,
+                "sales": kirim_val
+            })
         return Response({
             "success": True,
             "data": {
                 "categories": [{"name": c['category__name'] or "Boshqa", "value": c['total']} for c in cat_expenses],
-                "trend": list(trend_data)
+                "trend": formatted_trend
             }
         })
-    # 3. TOP PRODUCTS (SaleItem orqali hisoblash)
+    #TOP PRODUCTS (SaleItem orqali hisoblash)
     @action(detail=False, methods=['get'], url_path='top-products')
     def top_products(self, request):
-        # Bu qism grafikka ma'lumot tayyorlab beradi
         data = SaleItem.objects.values('product__name').annotate(
             total_sum=Sum(F('price') * F('quantity'))
         ).order_by('-total_sum')[:5]
-
-        # Frontendga tushunarli formatga o'tkazamiz
         result = [{"product": i['product__name'], "total": i['total_sum']} for i in data]
-
         return Response({
             "success": True,
             "data": result
         })
-    # 4. CREDIT ANALYTICS
+    # CREDIT ANALYTICs
     @action(detail=False, methods=['get'], url_path='credit-analytics')
     def credit_analytics(self, request):
         # payment_type__icontains deb yozsangiz xato yo'qoladi
