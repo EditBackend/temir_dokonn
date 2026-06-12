@@ -166,20 +166,19 @@ class SaleSerializer(serializers.ModelSerializer):
 
 
 class WarehouseIncomeSerializer(serializers.ModelSerializer):
-    product_name = serializers.ReadOnlyField(source='product.name')
     supplier_name = serializers.ReadOnlyField(source='supplier.name')
-    # Frontend jadvalda to'lov turi nomini (Naqd, Karta, Nasiya) ko'rishi uchun:
     payment_type_name = serializers.ReadOnlyField(source='payment_type.name')
-
-    # 🌟 Frontendchi dropdown (select) dan tanlagan ID-sini yuborishi uchun maydon:
-    payment_type_id = serializers.IntegerField(write_only=True, required=False)
-
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    unit_name = serializers.CharField(source='product.unit.name', read_only=True)
     class Meta:
         model = WarehouseIncome
         fields = [
-            'id', 'product', 'product_name', 'supplier', 'supplier_name',
-            'quantity', 'price', 'payment_type', 'payment_type_id', 'payment_type_name',
-            'total_price', 'check_number', 'created_at', 'employee'
+            'id',
+            'product', 'product_name', 'unit_name',
+            'supplier', 'supplier_name',
+            'quantity', 'price', 'total_price',
+            'payment_type', 'payment_type_name',
+            'check_number', 'created_at', 'employee'
         ]
         read_only_fields = ('created_at', 'check_number', 'total_price')
 
