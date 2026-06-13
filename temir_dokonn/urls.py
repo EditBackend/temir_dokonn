@@ -26,6 +26,7 @@ urlpatterns = [
     path('api/', include('api.urls')),  # API app
     # path("api/", include("ai.urls")),
     path('', home),  # root URL
+    path('api/', include('organization.urls')),
 ]
 
 # Media va static fayllarni lokalda ishlatish uchun

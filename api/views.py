@@ -22,7 +22,11 @@ from rest_framework.permissions import AllowAny
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from rest_framework import generics
+from organization.mixins import TenantViewSetMixin
+from rest_framework.permissions import IsAuthenticated
 from .models import Role, AppPage, RolePermission
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
 from .models import Product, Sale, Category, Supplier, WarehouseIncome, Customer, Employee, Role, ActivityLog, Batch, \
     Expense, SaleItem, ExpenseCategory, Payment, SaleItem, Product, Unit, PaymentType,ArchivedItem,CustomerPayment
 from .serializers import (
@@ -40,14 +44,21 @@ from .serializers import (
 )
 
 
-@api_view(['POST'])
-def receive_customer_payment(request, customer_id):
-    try:
-        customer = Customer.objects.get(pk=customer_id)
-    except Customer.DoesNotExist:
-        return Response({"success": False, "error": "Mijoz topilmadi"}, status=status.HTTP_404_NOT_FOUND)
 
-    # Ma'lumotlarni olish (JSON yoki Form-Data bo'lsa ham muammosiz o'qiydi)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def receive_customer_payment(request, customer_id):
+    current_company = request.user.company
+
+    try:
+
+
+        customer = Customer.objects.get(pk=customer_id, company=current_company)
+    except Customer.DoesNotExist:
+        return Response({"success": False, "error": "Mijoz topilmadi yoki sizning kompaniyangizga tegishli emas!"},
+                        status=status.HTTP_404_NOT_FOUND)
+
     amount_str = request.data.get('amount')
     payment_type = request.data.get('payment_type', 'cash')
 
@@ -56,14 +67,14 @@ def receive_customer_payment(request, customer_id):
                         status=status.HTTP_400_BAD_REQUEST)
 
     try:
-        payment_amount = Decimal(str(amount_str).replace(',', ''))  # Agar frontend vergul bilan yuborsa ham tozalaydi
+        payment_amount = Decimal(str(amount_str).replace(',', ''))
         if payment_amount <= 0:
             raise InvalidOperation
     except (InvalidOperation, ValueError):
         return Response({"success": False, "error": "Noto'g'ri summa formati kiritildi"},
                         status=status.HTTP_400_BAD_REQUEST)
 
-    # 2. Matematika: Qarzni kamaytirish
+    # Matematika: Qarzni kamaytirish
     if customer.total_debt >= payment_amount:
         customer.total_debt -= payment_amount
     else:
@@ -76,24 +87,25 @@ def receive_customer_payment(request, customer_id):
 
     customer.save()
 
-    # 3. To'lovlar tarixiga saqlash (related_name muammosi yechilgan)
+
+
     CustomerPayment.objects.create(
         customer=customer,
         amount=payment_amount,
-        payment_type=payment_type
+        payment_type=payment_type,
+        company=current_company  #  To'lov tarixiga ham kompaniya biriktirildi!
     )
 
-    # 4 ActivityLog qismini XAVFSIZ qilish:
-    # 500 xatolik bermasligi uchun try-except ichiga olamiz (agar modelda boshqa required fieldlar bo'lsa)
     try:
         from .models import ActivityLog
-        # Agar modelingizda employee yoki user majburiy bo'lsa, xato bermasligi uchun qidirib ko'ramiz
+
+
         ActivityLog.objects.create(
-            action=f"Mijoz {customer.name} {payment_amount} so'm qarzini uzdi. To'lov turi: {payment_type}"
+            action=f"Mijoz {customer.name} {payment_amount} so'm qarzini uzdi. To'lov turi: {payment_type}",
+            employee=request.user if hasattr(request.user, 'employee') else None  # Agar xodim ulanadigan bo'lsa
         )
     except Exception as log_error:
-        print(f"Log yozishda xato bo'ldi, lekin qarz o'chdi: {log_error}")
-        # Log yaratishda xato bo'lsa ham mijozning puli kuyib ketmasligi uchun jarayonni to'xtatmaymiz
+        print(f"Log yozishda xato bo'ldi: {log_error}")
 
     return Response({
         "success": True,
@@ -102,17 +114,21 @@ def receive_customer_payment(request, customer_id):
         "new_debt": customer.debt
     }, status=status.HTTP_200_OK)
 
-@api_view(['GET'])
-def customer_profile_details(request, customer_id):
-    """
-    Mijoz profilidagi barcha ma'lumotlarni bitta joyda berish API
-    """
-    try:
-        customer = Customer.objects.get(pk=customer_id)
-    except Customer.DoesNotExist:
-        return Response({"success": False, "error": "Mijoz topilmadi"}, status=404)
 
-    # To'lovlar tarixini olamiz
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def customer_profile_details(request, customer_id):
+    current_company = request.user.company
+
+    try:
+        # Mijozni faqat o'z kompaniyangizdan qidirish xavfsizligi
+        customer = Customer.objects.get(pk=customer_id, company=current_company)
+    except Customer.DoesNotExist:
+        return Response({"success": False, "error": "Mijoz topilmadi yoki sizga tegishli emas"}, status=404)
+
+
     payments = customer.customer_debt_payments.all().order_by('-created_at')
     payments_data = [
         {
@@ -123,10 +139,9 @@ def customer_profile_details(request, customer_id):
         } for p in payments
     ]
 
-    # Xaridlar tarixini olamiz (Agar sizda Sale modelida mijoz bog'langan bo'lsa)
-    # Eslatma: Sale modelida customer fieldi bo'lishi kerak
-    from .models import Sale
-    sales = Sale.objects.filter(customer=customer).order_by('-created_at')
+
+
+    sales = Sale.objects.filter(customer=customer, company=current_company).order_by('-created_at')
     sales_data = [
         {
             "id": s.id,
@@ -144,25 +159,24 @@ def customer_profile_details(request, customer_id):
             "name": customer.name,
             "phone": customer.phone,
             "address": customer.address or "Kiritilmagan",
-            "last_debt": customer.debt,          # Oxirgi tranzaksiya qarzi
-            "total_debt": customer.total_debt,    # Umumiy balans (Yig'ilgan qarz)
+            "last_debt": customer.debt,
+            "total_debt": customer.total_debt,
         },
-        "purchases": sales_data,                  # Xaridlar oynasi uchun
-        "payments": payments_data                 # To'lovlar oynasi uchun
+        "purchases": sales_data,
+        "payments": payments_data
     })
 
 
 
-
-
-
-
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def archive_list(request):
-    archives = ArchivedItem.objects.order_by('-deleted_at')
+
+    archives = ArchivedItem.objects.filter(company=request.user.company).order_by('-deleted_at')
+
     data = [
         {
-            "tur": item.get_item_type_display(), # 'Ta'minotchi' deb o'zbekcha chiqadi
+            "tur": item.get_item_type_display(),
             "nomi": item.name,
             "sana": item.deleted_at.strftime("%Y-%m-%d %H:%M"),
             "status": item.status
@@ -171,23 +185,27 @@ def archive_list(request):
     ]
     return Response(data)
 
-
-# EMPLOYEE DETAIL (GET, PATCH, DELETE uchun)
+# 1. EMPLOYEE DETAIL
 class EmployeeDetailView(APIView):
-    permission_classes = [AllowAny]
-    def get_object(self, pk):
+    permission_classes = [IsAuthenticated]  #  SaaS xavfsizligi uchun login shart!
+
+    def get_object(self, request, pk):
         try:
-            return Employee.objects.get(pk=pk)
+            # Xodimni faqat login qilgan CEO'ning kompaniyasidan qidiradi
+            return Employee.objects.get(pk=pk, company=request.user.company)
         except Employee.DoesNotExist:
             return None
+
     def get(self, request, pk):
-        employee = self.get_object(pk)
-        if not employee: return Response(status=404)
+        employee = self.get_object(request, pk)  # request uzatildi
+        if not employee: return Response({"error": "Xodim topilmadi yoki sizning kompaniyaga tegishli emas!"},
+                                         status=404)
         serializer = EmployeeSerializer(employee)
         return Response(serializer.data)
+
     def patch(self, request, pk):
-        employee = self.get_object(pk)
-        if not employee: return Response(status=404)
+        employee = self.get_object(request, pk)
+        if not employee: return Response({"error": "Xodim topilmadi!"}, status=404)
         serializer = EmployeeSerializer(employee, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
@@ -195,35 +213,38 @@ class EmployeeDetailView(APIView):
         return Response(serializer.errors, status=400)
 
     def delete(self, request, pk):
-        from .models import ArchivedItem, Employee  #  Employee modelingiz nomini aniq yozing
-        from django.shortcuts import get_object_or_404
-        employee = get_object_or_404(Employee, pk=pk)
-        # Xodim ismi 'name', 'first_name' yoki 'username' bo'lishi mumkin
-        emp_name = getattr(employee, 'name',getattr(employee, 'first_name', getattr(employee, 'username', str(employee))))
+        from .models import ArchivedItem, Employee
+        employee = self.get_object(request, pk)
+        if not employee: return Response({"error": "Xodim topilmadi!"}, status=404)
+
+        emp_name = getattr(employee, 'name', getattr(employee, 'first_name', str(employee)))
         ArchivedItem.objects.create(
             item_type='employee',
             name=emp_name,
             original_id=employee.id,
-            status="O'chirilgan"
+            status="O'chirilgan",
+            company=request.user.company  # Arxiv ham qaysi kompaniyaniki ekanligi yoziladi
         )
         employee.delete()
         return Response({"success": True, "message": "Xodim arxivlandi"}, status=200)
 
 
+# 2. ROLE DETAIL
 class RoleDetailView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]  #  IsAuthenticated qilindi
 
     def get(self, request, pk):
         try:
-            role = Role.objects.get(pk=pk)
+            # Faqat o'z kompaniyasining rollarini ko'ra oladi
+            role = Role.objects.get(pk=pk, company=request.user.company)
             serializer = RoleSerializer(role)
             return Response({"success": True, "data": serializer.data})
         except Role.DoesNotExist:
-            return Response({"success": False}, status=404)
+            return Response({"success": False, "error": "Rol topilmadi!"}, status=404)
 
     def put(self, request, pk):
         try:
-            role = Role.objects.get(pk=pk)
+            role = Role.objects.get(pk=pk, company=request.user.company)
             serializer = RoleSerializer(role, data=request.data)
             if serializer.is_valid():
                 serializer.save()
@@ -234,7 +255,7 @@ class RoleDetailView(APIView):
 
     def patch(self, request, pk):
         try:
-            role = Role.objects.get(pk=pk)
+            role = Role.objects.get(pk=pk, company=request.user.company)
             serializer = RoleSerializer(role, data=request.data, partial=True)
             if serializer.is_valid():
                 serializer.save()
@@ -243,33 +264,25 @@ class RoleDetailView(APIView):
         except Role.DoesNotExist:
             return Response({"success": False}, status=404)
 
-    #  Ikkita delete birlashtirildi, avval arxivga saqlaydi, keyin o'chiradi
     def delete(self, request, pk):
         try:
-            role = Role.objects.get(pk=pk)
-
-            # 1. Object delete qilinishidan oldin Archive modelga save qilinadi
+            role = Role.objects.get(pk=pk, company=request.user.company)
+            from .models import ArchivedItem
             ArchivedItem.objects.create(
                 item_type='role',
                 name=role.name,
                 original_id=role.id,
-                status="O'chirilgan"
+                status="O'chirilgan",
+                company=request.user.company  #  Arxivga kompaniya ulandi
             )
-
-            # 2. Keyin object delete qilinadi
             role.delete()
-
-            return Response({
-                "success": True,
-                "message": "Rol muvaffaqiyatli o'chirildi va arxivlandi"
-            }, status=status.HTTP_200_OK)
-
+            return Response({"success": True, "message": "Rol muvaffaqiyatli o'chirildi"}, status=200)
         except Role.DoesNotExist:
-            return Response({
-                "success": False,
-                "error": "Rol topilmadi"
-            }, status=status.HTTP_404_NOT_FOUND)
-class UnitViewSet(viewsets.ModelViewSet):
+            return Response({"success": False, "error": "Rol topilmadi"}, status=404)
+
+
+class UnitViewSet(TenantViewSetMixin, viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
     queryset = Unit.objects.all()
     serializer_class = UnitSerializer
 
@@ -285,7 +298,8 @@ class UnitViewSet(viewsets.ModelViewSet):
                 item_type='measure',  # models.py dagi ITEM_TYPES ga 'measure' deb qo'shib qo'ysangiz ham bo'ladi
                 name=obj_name,
                 original_id=instance.id,
-                status="O'chirilgan"
+                status="O'chirilgan",
+                company = request.user.company
             )
             instance.delete()
             return Response({"success": True, "message": "O'lchov o'chirildi va arxivlandi"}, status=200)
@@ -297,6 +311,7 @@ class UnitViewSet(viewsets.ModelViewSet):
             }, status=400)
         except Exception as e:
             return Response({"success": False, "error": str(e)}, status=400)
+
 #abc analiz
 @api_view(['GET'])
 def abc_xyz_analysis_optimized(request):
@@ -459,18 +474,18 @@ class ProductsTableView(APIView):
 
 
 #boshliq uchun expences oynasi
-class ExpenseViewSet(ModelViewSet):
+class ExpenseViewSet(TenantViewSetMixin, ModelViewSet):
+    permission_classes = [IsAuthenticated]
     queryset = Expense.objects.filter(is_deleted=False).select_related('category', 'created_by')
 
     def get_serializer_class(self):
-        # Create paytida CreateSerializer, ko'rish paytida oddiy Serializer
         if self.action in ['create', 'update', 'partial_update']:
             return ExpenseCreateSerializer
         return ExpenseSerializer
 
     def perform_create(self, serializer):
         # Saqlash paytida xodimni avtomatik biriktirish
-        serializer.save(created_by=self.request.user)
+        serializer.save(created_by=self.request.user, company=self.request.user.company)
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -516,7 +531,8 @@ class ExpenseCategoryList(generics.ListCreateAPIView, generics.RetrieveUpdateDes
         response = super().create(request, *args, **kwargs)
         return Response({"success": True, "data": response.data}, status=201)
 
-class BatchViewSet(viewsets.ModelViewSet):
+class BatchViewSet(TenantViewSetMixin, viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
     queryset = Batch.objects.all().order_by('-received_date')
     serializer_class = BatchSerializer
     # Sotuvni qayd qilish (qty_left kamayadi)
@@ -567,7 +583,8 @@ class BatchViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
-class CustomerViewSet(ModelViewSet):
+class CustomerViewSet(TenantViewSetMixin, ModelViewSet):
+    permission_classes = [IsAuthenticated]
     queryset = Customer.objects.all().order_by("-id")
     serializer_class = CustomerSerializer
 
@@ -590,7 +607,8 @@ def home(request):
     return JsonResponse({"message": "Temir dokon Backendda muammo yo'q.Chunki Backendchi yaxshi bola!"})
 
 
-class CategoryViewSet(ModelViewSet):
+class CategoryViewSet(TenantViewSetMixin, ModelViewSet):
+    permission_classes = [IsAuthenticated]
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
 
@@ -622,18 +640,17 @@ class CategoryViewSet(ModelViewSet):
             return Response({"success": False, "error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
-
-class ProductViewSet(ModelViewSet):
+class ProductViewSet(TenantViewSetMixin, ModelViewSet): # TenantViewSetMixin qo'shildi
+    permission_classes = [IsAuthenticated]
     serializer_class = ProductSerializer
-
     def get_queryset(self):
-        queryset = Product.objects.all()
+        queryset = super().get_queryset()
         category_id = self.request.query_params.get("category")
         if category_id:
             queryset = queryset.filter(category_id=category_id)
         return queryset
 
-    #  TUZATILGAN VA SUG'URTALANGAN DESTROY METODI
+
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
         from .models import ArchivedItem
@@ -641,9 +658,7 @@ class ProductViewSet(ModelViewSet):
         obj_name = getattr(instance, 'name', getattr(instance, 'title', str(instance)))
 
         try:
-            # Tranzaksiya ochamiz agar o'chirish o'xshasa, arxiv ham bazada qoladi. O'xshamasab, ikkalasi ham bekor bo'ladi.
             with transaction.atomic():
-                # 1. Arxivga yozamiz
                 ArchivedItem.objects.create(
                     item_type='product',
                     name=obj_name,
@@ -664,7 +679,8 @@ class ProductViewSet(ModelViewSet):
             return Response({"success": False, "error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
-class SaleViewSet(ModelViewSet):
+class SaleViewSet(TenantViewSetMixin, ModelViewSet):
+    permission_classes = [IsAuthenticated]
     queryset = Sale.objects.all().order_by('-created_at')
     serializer_class = SaleSerializer
 
@@ -765,12 +781,13 @@ class SaleViewSet(ModelViewSet):
 
 # HISOBOT
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def sales_summary(request):
 
     sana_from = request.query_params.get('sana_from')
     sana_to = request.query_params.get('sana_to')
 
-    sales = Sale.objects.all()
+    sales = Sale.objects.filter(company=request.user.company)
 
     if sana_from and sana_to:
         sales = sales.filter(
@@ -817,17 +834,18 @@ def last_check_number(request):
 
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def new_check_number(request):
 
-    last_sale = Sale.objects.order_by('-check_number').first()
-
-    new_check = last_sale.check_number + 1 if last_sale else 1
-
+    last_sale = Sale.objects.filter(company=request.user.company).order_by('-check_number').first()
+    new_check = last_sale.check_number + 1 if last_sale and last_sale.check_number else 1
     return Response({"new_check_number": new_check})
 
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def check_details(request, check_number=None):
+    company_sales = Sale.objects.filter(company=request.user.company)
     if check_number is None:
         checks = Sale.objects.values('check_number').distinct().order_by('-check_number')
         result = []
@@ -841,7 +859,7 @@ def check_details(request, check_number=None):
 
             products = []
             for sale in sales:
-                # 👇 XAVFSIZLIK: Agar mahsulot o'chib ketgan bo'lsa xato bermaydi
+                #  XAVFSIZLIK: Agar mahsulot o'chib ketgan bo'lsa xato bermaydi
                 product_name = sale.product.name if sale.product else "O'chirilgan mahsulot"
 
                 products.append({
@@ -866,69 +884,57 @@ def check_details(request, check_number=None):
             })
 
         return Response(result)
+        # Bitta aniq chekni ko'rish qismi
+        sales = company_sales.filter(check_number=check_number)
+        if not sales.exists():
+            return Response({"error": "Chek topilmadi yoki sizga tegishli emas"}, status=404)
 
-    # Bitta chek ma'lumotlarini olish qismi
-    sales = Sale.objects.filter(check_number=check_number)
+        total = sales.aggregate(total_sum=Sum('total_price'))
+        first_sale = sales.first()
 
-    if not sales.exists():
-        return Response({"error": "Chek topilmadi"}, status=404)
+        products = []
+        for sale in sales:
+            product_name = sale.product.name if sale.product else "O'chirilgan mahsulot"
+            products.append({
+                "product": product_name,
+                "quantity": sale.quantity,
+                "price": sale.price,
+                "total": sale.total_price,
+                "payment_type": sale.payment_type.name if hasattr(sale.payment_type, 'name') else str(sale.payment_type)
+            })
 
-    total = sales.aggregate(total_sum=Sum('total_price'))
-    first_sale = sales.first()
-
-    products = []
-    for sale in sales:
-        #  XAVFSIZLIK: Bu yerda ham mahsulot o'chgan bo'lsa xavfsiz nom beriladi
-        product_name = sale.product.name if sale.product else "O'chirilgan mahsulot"
-
-        products.append({
-            "product": product_name,
-            "quantity": sale.quantity,
-            "price": sale.price,
-            "total": sale.total_price,
-            "payment_type": sale.payment_type.name if hasattr(sale.payment_type, 'name') else str(sale.payment_type)
+        customer_data = CustomerSerializer(first_sale.customer).data if first_sale and first_sale.customer else {
+            "name": "O'chirilgan mijoz"}
+        return Response({
+            "check_number": check_number,
+            "customer": customer_data,
+            "date": first_sale.created_at if first_sale else None,
+            "total_sum": total['total_sum'] or 0,
+            "products": products
         })
 
-    # XAVFSIZLIK: Mijoz uchun tekshiruv
-    customer_data = CustomerSerializer(first_sale.customer).data if first_sale.customer else {
-        "name": "O'chirilgan mijoz"}
 
-    return Response({
-        "check_number": check_number,
-        "customer": customer_data,
-        "date": first_sale.created_at if first_sale else None,
-        "total_sum": total['total_sum'] or 0,
-        "products": products
-    })
-
-
-class SupplierViewSet(ModelViewSet):
+class SupplierViewSet(TenantViewSetMixin, ModelViewSet): #  TenantViewSetMixin qo'shildi
+    permission_classes = [IsAuthenticated]
     queryset = Supplier.objects.all()
     serializer_class = SupplierSerializer
 
-    # KLAS ICHIDA: destroy metodini xavfsiz override qilamiz
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
-
-        # Ismini xavfsiz olish (name yoki kompaniya nomi bo'lsa ham)
         obj_name = getattr(instance, 'name', getattr(instance, 'company_name', str(instance)))
 
         try:
-            # Atomik tranzaksiya: agar o'chsa arxivda qoladi, o'chmasa hammasi bekor bo'ladi
             with transaction.atomic():
-                # 1. Object o'chishidan oldin arxivlanadi
                 ArchivedItem.objects.create(
                     item_type='supplier',
                     name=obj_name,
                     original_id=instance.id,
-                    status="O'chirilgan"
+                    status="O'chirilgan",
+                    company = request.user.company
                 )
-
-                # 2. Standart yo'l bilan o'chiriladi (Frontend kutgan 204 statusini qaytaradi)
                 return super().destroy(request, *args, **kwargs)
 
         except ProtectedError:
-            # Agar ta'minotchi qayergadir bog'langan bo'lsa, xato bermay tushuntiradi
             return Response({
                 "success": False,
                 "error": "Bu ta'minotchiga bog'langan mahsulotlar yoki kirim hujjatlari bor! Shuning uchun uni o'chirish taqiqlanadi."
@@ -942,21 +948,18 @@ class SupplierViewSet(ModelViewSet):
 
 @csrf_exempt
 @api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
 def create_income(request):
-    #   Agar frontendchi dropdown uchun to'lov turlarini so'rasa:
     if request.method == 'GET':
         types = PaymentType.objects.all()
         data = [{"id": t.id, "name": t.name} for t in types]
         return Response(data)
-
-    #  Agar frontendchi kirimni saqlash uchun POST so'rov yuborsa:
     if request.method == 'POST':
         supplier_id = request.data.get("supplier")
         items = request.data.get("lines")
         employee_id = request.data.get("employee")
         # Frontendchi xohlagan 'payment_type' nomini ham, 'payment_type_id' nomini ham tekshirib olamiz:
         payment_type_id = request.data.get("payment_type") or request.data.get("payment_type_id")
-
         if not supplier_id:
             return Response({"error": "Supplier bo'sh"}, status=400)
         if not items:
@@ -970,12 +973,13 @@ def create_income(request):
             return Response({"error": "Bunday to'lov turi topilmadi"}, status=400)
         p_type_name = payment_type.name.lower()
         chek_umumiy_summasi = Decimal('0.00')
+        current_company = request.user.company
+
         with transaction.atomic():
-            last_income = WarehouseIncome.objects.select_for_update().order_by('-check_number').first()
+            last_income = WarehouseIncome.objects.filter(company=current_company).select_for_update().order_by(
+                '-check_number').first()
             new_check_number = (last_income.check_number + 1) if last_income and last_income.check_number else 1
             common_time = timezone.now()
-            # Birinchi ta'minotchini blocklab olamiz (Parallel yozishda muammo bo'lmasligi uchun)
-            from .models import Supplier
             try:
                 supplier = Supplier.objects.select_for_update().get(id=supplier_id)
             except Supplier.DoesNotExist:
@@ -1002,7 +1006,8 @@ def create_income(request):
                     check_number=new_check_number,
                     created_at=common_time,
                     payment_type=payment_type,
-                    employee_id=employee_id if employee_id else None
+                    employee_id=employee_id if employee_id else None,
+                    company=current_company
                 )
 
                 # 2. Batch (Partiya) yaratish
@@ -1013,10 +1018,10 @@ def create_income(request):
                     unit_cost=price,
                     qty_in=quantity,
                     qty_left=quantity,
-                    batch_code=f"BATCH-{uuid.uuid4().hex[:8].upper()}"
+                    batch_code=f"BATCH-{uuid.uuid4().hex[:8].upper()}",
+                    company=current_company
                 )
 
-                # 3. Mahsulotni yangilash
                 product.refresh_from_db()
                 product.last_price = price
                 if not product.supplier_id:
@@ -1024,54 +1029,43 @@ def create_income(request):
                 product.save()
 
 
-#  PULLARNI HISOBLASH MANTIQLARI (MUTLAQ XAVFSIZ VARIANT)
+            if 'nasiya' in p_type_name:
+                supplier.debt = chek_umumiy_summasi
+                supplier.save()
 
+                total_nasiya = WarehouseIncome.objects.filter(
+                    supplier=supplier,
+                    company=current_company, #  Kompaniya filtri
+                    payment_type__name__icontains='nasiya'
+                ).aggregate(total=Sum('total_price'))['total'] or Decimal('0.00')
 
-    if 'nasiya' in p_type_name:
-        # 1. Oxirgi qarz - joriy chek summasi
-        supplier.debt = chek_umumiy_summasi
-        supplier.save()  # Avval buni saqlaymiz
+                supplier.total_debt = total_nasiya
+                supplier.save()
+            else:
+                category, _ = ExpenseCategory.objects.get_or_create(name="Ombor kirimi uchun")
+                expense_payment_type = 'card' if 'kart' in p_type_name else 'cash'
 
-        # 2. Jami qarzni xavfsiz hisoblash:
-        # Ta'minotchining bazadagi barcha 'Nasiya' bo'lgan kirimlarini qaytadan hisoblab chiqamiz.
-        # Shunda frontend 2 marta so'rov yuborgan taqdirda ham, faqat bazadagi bor cheklar yig'indisi chiqadi.
+                if not Expense.objects.filter(note__contains=f"#{new_check_number}", company=current_company).exists():
+                    Expense.objects.create(
+                        date=common_time.date(),
+                        category=category,
+                        amount=chek_umumiy_summasi,
+                        payment_type=expense_payment_type,
+                        note=f"Omborga kirim #{new_check_number}. Ta'minotchi: {supplier.name}",
+                        company=current_company #  Xarajatga ham kompaniya yozildi
+                    )
+                supplier.debt = Decimal('0.00')
+                supplier.save()
 
+        return Response({"success": True, "data": {"check_number": new_check_number, "total_amount": float(chek_umumiy_summasi)}})
 
-         # Diqqat: 'payment_type__name__icontains' orqali Nasiya kirimlarini filtrlaymiz
-        total_nasiya = WarehouseIncome.objects.filter(
-            supplier=supplier,
-            payment_type__name__icontains='nasiya'
-        ).aggregate(total=Sum('total_price'))['total'] or Decimal('0.00')
-
-        # Jami qarzni bazadan hisoblangan aniq summaga tenglashtiramiz (+= EMAS, = ISHLATAMIZ!)
-        supplier.total_debt = total_nasiya
-        supplier.save()
-
-    # B) Naqd yoki Karta bo'lsa
-    else:
-        category, _ = ExpenseCategory.objects.get_or_create(name="Ombor kirimi uchun")
-        expense_payment_type = 'card' if 'kart' in p_type_name else 'cash'
-
-        # Double-submit (ikki marta tushib qolish) oldini olish uchun tekshiruv:
-        # Agar shu sonli chek allaqachon xarajatga yozilgan bo'lsa, qayta yaratmaymiz
-        if not Expense.objects.filter(note__contains=f"#{new_check_number}").exists():
-            Expense.objects.create(
-                date=common_time.date(),
-                category=category,
-                amount=chek_umumiy_summasi,
-                payment_type=expense_payment_type,
-                note=f"Omborga kirim #{new_check_number}. Ta'minotchi: {supplier.name}",
-                created_by_id=None
+        if employee_id:
+            ActivityLog.objects.create(
+                employee_id=employee_id,
+                action=f"{new_check_number}-sonli chek bilan omborga kirim qildi"
             )
 
-        supplier.debt = Decimal('0.00')
-        supplier.save()
 
-    if employee_id:
-        ActivityLog.objects.create(
-            employee_id=employee_id,
-            action=f"{new_check_number}-sonli chek bilan omborga kirim qildi"
-        )
 
     return Response({
         "success": True,
@@ -1156,10 +1150,11 @@ def income_check_details(request, check_number=None):
 
 # real foydani hisoblash uchun api
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def real_profit(request):
     sana_from = request.query_params.get('sana_from')
     sana_to = request.query_params.get('sana_to')
-    sales = Sale.objects.all()
+    sales = Sale.objects.filter(company=request.user.company)
     if sana_from and sana_to:
         sales = sales.filter(
             created_at__date__range=[
@@ -1584,40 +1579,29 @@ def activity_list(request):
 
 
 
-class DashboardViewSet(viewsets.ViewSet):
-    permission_classes = [AllowAny]
-    # 1. ASOSIY STATISTIKA (SUMMARY)
+class DashboardViewSet(TenantViewSetMixin, viewsets.ViewSet):
+    permission_classes = [IsAuthenticated]
     @action(detail=False, methods=['get'], url_path='summary')
     def summary(self, request):
         sana_from = request.GET.get('date_from')
         sana_to = request.GET.get('date_to')
-        sales = Sale.objects.all()
-        warehouse_incomes = WarehouseIncome.objects.all()
-        other_expenses = Expense.objects.filter(is_deleted=False)
+        current_company = request.user.company
+        sales = Sale.objects.filter(company=current_company)
+        warehouse_incomes = WarehouseIncome.objects.filter(company=current_company)
+        other_expenses = Expense.objects.filter(is_deleted=False, company=current_company)
         if sana_from and sana_to:
             sales = sales.filter(created_at__date__range=[sana_from, sana_to])
             warehouse_incomes = warehouse_incomes.filter(created_at__date__range=[sana_from, sana_to])
             other_expenses = other_expenses.filter(date__range=[sana_from, sana_to])
+
         total_sales = sales.aggregate(total=Sum('total_price'))['total'] or 0
         total_expense = (warehouse_incomes.aggregate(total=Sum('total_price'))['total'] or 0) + \
                         (other_expenses.aggregate(total=Sum('amount'))['total'] or 0)
+
         nasiya_qs = sales.filter(payment_type__icontains='Nasiya')
         nasiya_sum = nasiya_qs.aggregate(total=Sum('total_price'))['total'] or 0
         nasiya_count = nasiya_qs.count()
-        # O'sish foizi (Growth)
-        growth_percent = 0
-        if sana_from and sana_to:
-            try:
-                d1 = datetime.strptime(sana_from, '%Y-%m-%d')
-                d2 = datetime.strptime(sana_to, '%Y-%m-%d')
-                p_s1, p_s2 = d1 - relativedelta(months=1), d2 - relativedelta(months=1)
-                prev_sales = \
-                Sale.objects.filter(created_at__date__range=[p_s1, p_s2]).aggregate(total=Sum('total_price'))[
-                    'total'] or 0
-                if prev_sales > 0:
-                    growth_percent = ((total_sales - prev_sales) / prev_sales) * 100
-            except:
-                pass
+
         return Response({
             "success": True,
             "data": {
@@ -1626,32 +1610,21 @@ class DashboardViewSet(viewsets.ViewSet):
                 "net_cash": total_sales - total_expense,
                 "nasiya_sum": nasiya_sum,
                 "nasiya_count": nasiya_count,
-                "growth_percent": round(growth_percent, 2)
+                "growth_percent": 0
             }
         })
-#KIRIM-CHIQIM (CASH FLOW)
+
     @action(detail=False, methods=['get'], url_path='cash-flow')
     def cash_flow(self, request):
-        sana_from = request.GET.get('date_from')
-        sana_to = request.GET.get('date_to')
-        sales = Sale.objects.all()
-        expenses = Expense.objects.filter(is_deleted=False)
-        if sana_from and sana_to:
-            sales = sales.filter(created_at__date__range=[sana_from, sana_to])
-            expenses = expenses.filter(date__range=[sana_from, sana_to])
+        current_company = request.user.company
+        sales = Sale.objects.filter(company=current_company)
+        expenses = Expense.objects.filter(is_deleted=False, company=current_company)
+
         cat_expenses = expenses.values('category__name').annotate(total=Sum('amount'))
         trend_query = sales.annotate(day=TruncDate('created_at')).values('day').annotate(
             kirim=Sum('total_price')).order_by('day')
-        formatted_trend = []
-        for item in trend_query:
-            day_str = str(item['day']) if item['day'] else ""
-            kirim_val = float(item['kirim']) if item['kirim'] else 0.0
-            formatted_trend.append({
-                "day": day_str,
-                "kirim": kirim_val,
-                "date": day_str,
-                "sales": kirim_val
-            })
+
+        formatted_trend = [{"day": str(item['day']), "kirim": float(item['kirim'] or 0.0)} for item in trend_query]
         return Response({
             "success": True,
             "data": {
@@ -1659,7 +1632,8 @@ class DashboardViewSet(viewsets.ViewSet):
                 "trend": formatted_trend
             }
         })
-    #TOP PRODUCTS (SaleItem orqali hisoblash)
+
+
     @action(detail=False, methods=['get'], url_path='top-products')
     def top_products(self, request):
         data = SaleItem.objects.values('product__name').annotate(

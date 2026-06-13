@@ -1,9 +1,9 @@
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from organization.models import TenantModel
 
-
-class AppPage(models.Model):
+class AppPage(TenantModel):
     name = models.CharField(max_length=100, verbose_name="Sahifa nomi")
     codename = models.CharField(max_length=100, unique=True,verbose_name="Tizim uchun qisqa nomi")
 
@@ -11,7 +11,7 @@ class AppPage(models.Model):
         return self.name
 
 
-class RolePermission(models.Model):
+class RolePermission(TenantModel):
     role = models.ForeignKey('Role', on_delete=models.CASCADE, related_name='permissions')
     page = models.ForeignKey(AppPage, on_delete=models.CASCADE, related_name='page_permissions')
     can_view = models.BooleanField(default=False, verbose_name="Ko'rish")
@@ -36,14 +36,14 @@ class Branch(models.Model):
         return self.name
 
 
-class ExpenseCategory(models.Model):
+class ExpenseCategory(TenantModel):
     name = models.CharField(max_length=255)
 
     def __str__(self):
         return self.name
 
 
-class Expense(models.Model):
+class Expense(TenantModel):
     PAYMENT_TYPES = (
         ('cash', 'Cash'),
         ('card', 'Card'),
@@ -61,7 +61,7 @@ class Expense(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
 
-class Role(models.Model):
+class Role(TenantModel):
     name = models.CharField(max_length=50)
     can_sell = models.BooleanField(default=False)
     can_income = models.BooleanField(default=False)
@@ -73,7 +73,7 @@ class Role(models.Model):
 
 
 
-class Employee(models.Model):
+class Employee(TenantModel):
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
     login = models.CharField(max_length=150, unique=True, null=True, blank=True)
@@ -101,7 +101,7 @@ class Employee(models.Model):
         return f"{self.first_name} {self.last_name}"
 
 
-class ActivityLog(models.Model):
+class ActivityLog(TenantModel):
     """
     Kim nima qilganini yozib boradi
     har bir harakat saqlanadi.
@@ -125,7 +125,7 @@ class ActivityLog(models.Model):
 
 
 
-class Customer(models.Model):
+class Customer(TenantModel):
     first_name = models.CharField(max_length=80)
     last_name = models.CharField(max_length=80)
     phone = models.CharField(max_length=20, unique=True)
@@ -139,7 +139,7 @@ class Customer(models.Model):
         return f"{self.first_name} {self.last_name} ({self.phone})"
 # models.py ichida CustomerPayment modelini toping va mana shunga almashtiring:
 
-class CustomerPayment(models.Model):
+class CustomerPayment(TenantModel):
     PAYMENT_METHODS = [
         ('cash', 'Naqd'),
         ('card', 'Karta'),
@@ -155,7 +155,7 @@ class CustomerPayment(models.Model):
         return f"{self.customer.name} - {self.amount} so'm"
 
 
-class Category(models.Model):
+class Category(TenantModel):
 
     name = models.CharField(max_length=100)
 
@@ -163,20 +163,20 @@ class Category(models.Model):
         return self.name
 
 # O'lchov birligi uchun
-class Unit(models.Model):
+class Unit(TenantModel):
     name = models.CharField(max_length=50, unique=True, verbose_name="O'lchov birligi nomi")
     short_name = models.CharField(max_length=10, blank=True, null=True, verbose_name="Qisqartma nomi") # masalan: kg, l
 
     def __str__(self):
         return self.name
 
-class PaymentType(models.Model):
+class PaymentType(TenantModel):
     name = models.CharField(max_length=50, unique=True, verbose_name="To'lov turi nomi")
 
     def __str__(self):
         return self.name
 
-class Supplier(models.Model):
+class Supplier(TenantModel):
     name = models.CharField(max_length=255)
     phone = models.CharField(max_length=50)
     boss_name = models.CharField(max_length=255, null=True, blank=True, verbose_name="Boshliq ismi")
@@ -189,7 +189,7 @@ class Supplier(models.Model):
 
 
 
-class Product(models.Model):
+class Product(TenantModel):
     name = models.CharField(max_length=255, null=True, blank=True)
     # sotuv narxi
     price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -242,7 +242,7 @@ class Product(models.Model):
 
 
 
-class WarehouseIncome(models.Model):
+class WarehouseIncome(TenantModel):
 
 
     PAYMENT_TYPES = (
@@ -347,7 +347,7 @@ class WarehouseIncome(models.Model):
 
 
 
-class Batch(models.Model):
+class Batch(TenantModel):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="batches")
     supplier = models.ForeignKey(Supplier, on_delete=models.CASCADE, related_name="batches")
     received_date = models.DateField(auto_now_add=True)
@@ -369,7 +369,7 @@ class Batch(models.Model):
         return f"{self.product.name} - {self.batch_code}"
 
 
-class Sale(models.Model):
+class Sale(TenantModel):
 
     PAYMENT_TYPES = (
         ('Naqd', 'Naqd'),
@@ -462,14 +462,14 @@ class Sale(models.Model):
         return f"{product_name} - {self.quantity}"
 
 
-class SaleItem(models.Model):
+class SaleItem(TenantModel):
     sale = models.ForeignKey(Sale, on_delete=models.CASCADE)
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     quantity = models.IntegerField()
     price = models.DecimalField(max_digits=10, decimal_places=2)
 
     #Rollback auditlog narx tarixini saqlash
-class PriceHistory(models.Model):
+class PriceHistory(TenantModel):
     product = models.ForeignKey(
     Product,
     on_delete=models.CASCADE,
@@ -491,7 +491,7 @@ class PriceHistory(models.Model):
 
 
 # Crededit analitikalari
-class Payment(models.Model):
+class Payment(TenantModel):
     customer = models.ForeignKey(
         Customer,
         on_delete=models.CASCADE,
@@ -519,7 +519,7 @@ class Payment(models.Model):
 
 
 
-class ArchivedItem(models.Model):
+class ArchivedItem(TenantModel):
     ITEM_TYPES = [
         ('supplier', 'Ta\'minotchi'),
         ('product', 'Mahsulot'),
