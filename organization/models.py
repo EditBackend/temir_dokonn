@@ -62,12 +62,13 @@ class CompanySubscription(models.Model):
     def __str__(self):
         return f"{self.company.name} - {self.tariff.name}"
 
-#  Bir martalik kodlarni saqlash (OTP)
 class VerificationCode(models.Model):
     phone = models.CharField(max_length=20)
     code = models.CharField(max_length=6)
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True) # Bazaga avtomat vaqt qo'yadi
     is_used = models.BooleanField(default=False)
 
     def is_valid(self):
-        return timezone.now() < self.created_at + timedelta(minutes=5) and not self.is_used
+        #  TO'G'RI VARIANT: timezone.now() loyihangiz vaqt zonasi (Asia/Tashkent) bilan ishlashini ta'minlaydi
+        eskirish_muddati = self.created_at + timedelta(minutes=2) # Kod 2 daqiqa amal qiladi
+        return timezone.now() <= eskirish_muddati

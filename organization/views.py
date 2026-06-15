@@ -50,7 +50,7 @@ def verify_ceo(request):
     code = request.data.get('code')
     name = request.data.get('name')  # Ism-familiya
 
-    otp = VerificationCode.objects.filter(phone=phone, code=code, is_used=False).last()
+    otp = VerificationCode.objects.filter(phone=phone, code=code, is_used=False).order_by('-id').first()
     if not otp or not otp.is_valid():
         return Response({"error": "Kod noto'g'ri yoki muddati o'tgan!"}, status=400)
 
@@ -119,7 +119,7 @@ def login_employee(request):
     if not check_password(password, employee.password):
         return Response({"error": "Parol noto'g'ri!"}, status=400)
 
-    # Subskripsiyani tekshirish (Muddati tugagan bo'lsa kirgizmashlik mantiqi)
+    # Subskripsiyani tekshirish
     sub = CompanySubscription.objects.filter(company=employee.company, status__in=['active', 'trialing']).last()
     if not sub or sub.end_date < timezone.now():
         if sub:
@@ -161,7 +161,7 @@ def reset_password(request):
     code = request.data.get('code')
     new_password = request.data.get('new_password')
 
-    otp = VerificationCode.objects.filter(phone=phone, code=code, is_used=False).last()
+    otp = VerificationCode.objects.filter(phone=phone, code=code, is_used=False).order_by('-id').first()
     if not otp or not otp.is_valid():
         return Response({"error": "Kod xato yoki muddati o'tgan!"}, status=400)
 
