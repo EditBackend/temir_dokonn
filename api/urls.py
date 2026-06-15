@@ -1,5 +1,7 @@
 from django.urls import path,include
 from rest_framework.routers import DefaultRouter
+
+from . import views
 from .views import UnitViewSet, RoleDetailView, archive_list, customer_profile_details, \
     receive_customer_payment, role_permissions_management  # Buni views.py da yozganmiz
 from .views import (
@@ -240,6 +242,7 @@ urlpatterns = [
     path('customers/<int:customer_id>/profile/', customer_profile_details, name='customer-profile'),
     path('customers/<int:customer_id>/pay/', receive_customer_payment, name='customer-pay'),
     path('roles/<int:role_id>/permissions/', role_permissions_management, name='role-permissions'),
+    path('archive-list/', views.archive_list, name='archive-list'),
 ]
 
 #  MUHIM
