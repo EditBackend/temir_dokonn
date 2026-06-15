@@ -42,17 +42,25 @@ def register_request(request):
     return Response({"success": True, "message": "Tasdiqlash kodi botga yuborildi."})
 
 
-# Kelgan kodni tekshirish va CEO profilini ochish
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def verify_ceo(request):
     phone = request.data.get('phone')
     code = request.data.get('code')
-    name = request.data.get('name')  # Ism-familiya
 
+    # Frontendchi 'name' yoki 'first_name' yuborsa ham o'qib oladigan qilamiz
+    name = request.data.get('name') or request.data.get('first_name')
+
+    # 1. Kod va telefonni tekshirish
     otp = VerificationCode.objects.filter(phone=phone, code=code, is_used=False).order_by('-id').first()
     if not otp or not otp.is_valid():
         return Response({"error": "Kod noto'g'ri yoki muddati o'tgan!"}, status=400)
+
+    # XAVFSIZLIK: Agar frontendchi baribir ism yubormagan bo'lsa, bazani asrab qolish uchun vaqtinchalik nom beramiz
+    if not name:
+        name = f"CEO_{phone[-4:]}"  # Masalan: CEO_1814 deb yozib ketadi bazaga, keyingi bosqichda to'g'irlasa bo'ladi
+        # Yoki xohlasangiz qattiq tekshiruv qo'ying:
+        # return Response({"error": "Ism-familiya (name) maydoni majburiy!"}, status=400)
 
     otp.is_used = True
     otp.save()
@@ -60,10 +68,22 @@ def verify_ceo(request):
     # Xodim (CEO) sifatida vaqtinchalik saqlash
     employee, created = Employee.objects.get_or_create(
         phone=phone,
-        defaults={'name': name, 'is_ceo': True, 'is_verified': True, 'password': make_password('temporary_pass')}
+        defaults={
+            'name': name,  #  Endi bu yerga null tushmaydi!
+            'is_ceo': True,
+            'is_verified': True,
+            'password': make_password('temporary_pass')
+        }
     )
 
+    # Agar xodim allaqachon mavjud bo'lsa-yu, lekin ismi o'zgargan bo'lsa yangilab qo'yamiz
+    if not created and employee.name != name:
+        employee.name = name
+        employee.save()
+
     return Response({"success": True, "message": "Telefon raqam tasdiqlandi. Endi kompaniya yarating."})
+
+
 
 
 # Kompaniya yaratish va 7 kunlik demo berish
