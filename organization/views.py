@@ -11,7 +11,7 @@ from .models import Company, Employee, TariffPlan, CompanySubscription, Verifica
 
 # TELEGRAM BOT MA'LUMOTLARI (Domla aytgan bot tokenini shu yerga qo'ying)
 TELEGRAM_BOT_TOKEN = "8837150918:AAFCLCzlPXILiaktZy8OHP28ynntXlYiRVY"
-TELEGRAM_CHAT_ID = "8235903420"  # Guruh yoki admin ID si
+TELEGRAM_CHAT_ID = "7724173791"  # Guruh yoki admin ID si
 
 
 def send_otp_via_telegram(phone, code):
