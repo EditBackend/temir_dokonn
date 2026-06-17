@@ -640,16 +640,22 @@ class CategoryViewSet(TenantViewSetMixin, ModelViewSet):
             return Response({"success": False, "error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
-class ProductViewSet(TenantViewSetMixin, ModelViewSet): # TenantViewSetMixin qo'shildi
+class ProductViewSet(TenantViewSetMixin, ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = ProductSerializer
+
+    #  XATOLIKNI TUZATUVCHI ASOSIY QATOR (Baza so'rovi shu yerda bo'lishi shart):
+    queryset = Product.objects.all()
+
     def get_queryset(self):
+        # Endi super().get_queryset() portlamaydi, chunki yuqorida queryset bor!
+        # TenantViewSetMixin uni avtomat ravishda faqat shu xodim kompaniyasiga filtrlab beradi.
         queryset = super().get_queryset()
+
         category_id = self.request.query_params.get("category")
         if category_id:
             queryset = queryset.filter(category_id=category_id)
         return queryset
-
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -665,11 +671,9 @@ class ProductViewSet(TenantViewSetMixin, ModelViewSet): # TenantViewSetMixin qo'
                     original_id=instance.id,
                     status="O'chirilgan"
                 )
-                #Standart DRF o'chirish metodini chaqiramiz (Bu avtomat 204 No Content qaytaradi)
                 return super().destroy(request, *args, **kwargs)
 
         except ProtectedError:
-            # Agar mahsulot savdoda qatnashgan bo'lsa, frontendga chiroyli ogohlantirish beramiz
             return Response({
                 "success": False,
                 "error": "Bu mahsulot savdo cheklari (sotuvlar) yoki ombor kirimlariga bog'langan! Shuning uchun uni o'chirib bo'lmaydi."
@@ -677,6 +681,7 @@ class ProductViewSet(TenantViewSetMixin, ModelViewSet): # TenantViewSetMixin qo'
 
         except Exception as e:
             return Response({"success": False, "error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 class SaleViewSet(TenantViewSetMixin, ModelViewSet):
