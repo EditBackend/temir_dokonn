@@ -128,7 +128,8 @@ urlpatterns = [
     # AUTH LOGIN
     path('login/', login_employee),
 
-    # ARCHIVE LIST (Faqat bitta toza url qoldi)
+# Frontendchiga qulay bo'lishi uchun ikkala variantni ham qo'shib qo'yamiz:
+    path('archive/', views.archive_list, name='archive-old'),
     path('archive-list/', views.archive_list, name='archive-list'),
 ]
 

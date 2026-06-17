@@ -125,9 +125,7 @@ def create_company(request):
 
     return Response({"success": True, "message": "Kompaniya va 7 kunlik demo reja muvaffaqiyatli yaratildi!"})
 
-
-#  Tizimga kirish (Login)
-#  Tizimga kirish (Login) - 100% KAFOLATLANGAN TOZA VARIANT
+#  Tizimga kirish (Login) - YAKUNIY VA XAVFSIZ VARIANT
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login_employee(request):
@@ -150,20 +148,15 @@ def login_employee(request):
             sub.save()
         return Response({"error": "Sizning tarif muddatingiz tugagan! Iltimos to'lov qiling."}, status=402)
 
-    # 🟢 BU YERDA TOKENSiz, TOZA GENERATSIYA QILAMIZ:
-    # Bo'sh refresh token yaratib, ichiga xodim ID'sini majburlab joylaymiz
+    # 🟢 TOKEnni qo'lda yaratamiz, lekin TenantViewSetMixin taniy olishi uchun
+    # xodimning haqiqiy ID sini 'user_id' kalitiga yozamiz:
     refresh = RefreshToken()
-
-    # Simple JWT kelajakda "user_not_found" demasligi uchun token ichiga default 1-ID li
-    # (yoki ixtiyoriy) standart userni ko'rsatib qo'yamiz, lekin qo'shimcha ravishda
-    # xodimning haqiqiy ID sini ham yopishtiramiz:
-    refresh['user_id'] = 1  # Djangoning ichki filterlaridan o'tishi uchun dummy id
-    refresh['employee_id'] = employee.id  #  Mana bu haqiqiy xodim ID'si (21)
-    refresh['company_id'] = employee.company.id if employee.company else None
+    refresh['user_id'] = employee.id  #  Mana shu yerda haqiqiy ID (masalan 21) ketadi
+    refresh['username'] = employee.phone
 
     return Response({
         "success": True,
-        "token": str(refresh.access_token),  # Frontendchiga boradigan toza Access Token
+        "token": str(refresh.access_token),
         "refresh_token": str(refresh),
         "user": {
             "id": employee.id,
