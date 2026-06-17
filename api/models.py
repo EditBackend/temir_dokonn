@@ -500,7 +500,7 @@ class Payment(TenantModel):
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     date = models.DateField(auto_now_add=True)
     def save(self, *args, **kwargs):
-        # 1. Faqat yangi to'lov qo'shilayotganda mijoz qarzini kamaytiramiz
+        #  Faqat yangi to'lov qo'shilayotganda mijoz qarzini kamaytiramiz
         if not self.pk:
             if self.customer:
                 # Mijozning joriy qarzidan to'langan summani ayiramiz

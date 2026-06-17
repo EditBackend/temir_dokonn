@@ -5,11 +5,13 @@ from datetime import timedelta
 from django.contrib.auth.hashers import make_password, check_password
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.response import Response
 from rest_framework import status
 from .models import Company, Employee, TariffPlan, CompanySubscription, VerificationCode
 
-# TELEGRAM BOT MA'LUMOTLARI (Domla aytgan bot tokenini shu yerga qo'ying)
+
+
 TELEGRAM_BOT_TOKEN = "8837150918:AAFCLCzlPXILiaktZy8OHP28ynntXlYiRVY"
 TELEGRAM_CHAT_ID = "7724173791"  # Guruh yoki admin ID si
 
@@ -147,10 +149,14 @@ def login_employee(request):
             sub.save()
         return Response({"error": "Sizning tarif muddatingiz tugagan! Iltimos to'lov qiling."}, status=402)
 
+    refresh = RefreshToken.for_user(employee)
+
     return Response({
         "success": True,
-        "token": "MOCK_TOKEN_XYZ123",  # Agar JWT bo'lsa o'zingizni token generatorni qo'ying
+        "token": str(refresh.access_token),
+        "refresh_token": str(refresh),
         "user": {
+            "id": employee.id,
             "name": employee.name,
             "is_ceo": employee.is_ceo,
             "company": employee.company.name if employee.company else None
