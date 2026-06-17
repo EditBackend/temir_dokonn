@@ -71,21 +71,29 @@ CSRF_COOKIE_SAMESITE = 'None'
 CSRF_COOKIE_SECURE = True
 SESSION_COOKIE_SECURE = True
 
+
 # ========================
-# DJANGO REST FRAMEWORK
+# REST FRAMEWORK & JWT SOZLAMALARI
 # ========================
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 1000,
-
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        # 'rest_framework.authentication.SessionAuthentication', # <--- Buni izohga olib tursang, CSRF so'ramaydi
-        'rest_framework.authentication.BasicAuthentication',
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.AllowAny',
+        'rest_framework.permissions.IsAuthenticated',
     ),
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# JWT token muddatlarini uzaytirish (Frontendchi har 5 daqiqada login qilmasligi uchun)
+from datetime import timedelta
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),   # 1 kun amal qiladi
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),  # 7 kun amal qiladi
+    'AUTH_HEADER_TYPES': ('Bearer',),             # Faqat 'Bearer <token>'ni qabul qiladi
 }
 
 
