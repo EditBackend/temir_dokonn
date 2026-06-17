@@ -125,7 +125,7 @@ def create_company(request):
 
     return Response({"success": True, "message": "Kompaniya va 7 kunlik demo reja muvaffaqiyatli yaratildi!"})
 
-#  Tizimga kirish (Login) - YAKUNIY VA XAVFSIZ VARIANT
+#  Tizimga kirish (Login) - CHEKINISHLARI TO'G'RILANGAN VARIANT
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login_employee(request):
@@ -135,32 +135,29 @@ def login_employee(request):
         employee = Employee.objects.get(phone=phone, is_verified=True)
     except Employee.DoesNotExist:
         return Response({"error": "Foydalanuvchi topilmadi!"}, status=404)
-
     if not check_password(password, employee.password):
         return Response({"error": "Parol noto'g'ri!"}, status=400)
-
-    # Subskripsiyani tekshirish
     sub = CompanySubscription.objects.filter(company=employee.company, status__in=['active', 'trialing']).last()
     if not sub or sub.end_date < timezone.now():
         if sub:
             sub.status = 'expired'
             sub.save()
         return Response({"error": "Sizning tarif muddatingiz tugagan! Iltimos to'lov qiling."}, status=402)
-        refresh = RefreshToken()
-        refresh['user_id'] = employee.id
-        refresh['username'] = employee.phone
+    refresh = RefreshToken()
+    refresh['user_id'] = employee.id
+    refresh['username'] = employee.phone
+    return Response({
+        "success": True,
+        "token": str(refresh.access_token),
+        "refresh_token": str(refresh),
+        "user": {
+            "id": employee.id,
+            "name": employee.name,
+            "is_ceo": employee.is_ceo,
+            "company": employee.company.name if employee.company else None
+        }
+    }, status=status.HTTP_200_OK)
 
-        return Response({
-            "success": True,
-            "token": str(refresh.access_token),
-            "refresh_token": str(refresh),
-            "user": {
-                "id": employee.id,
-                "name": employee.name,
-                "is_ceo": employee.is_ceo,
-                "company": employee.company.name if employee.company else None
-            }
-        })
 
 # Parolni unutganda kod yuborish
 @api_view(['POST'])
