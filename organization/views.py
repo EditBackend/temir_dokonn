@@ -50,7 +50,7 @@ def verify_ceo(request):
     phone = request.data.get('phone')
     code = request.data.get('code')
 
-    # Frontendchi 'name' yoki 'first_name' yuborsa ham o'qib oladigan qilamiz
+
     name = request.data.get('name') or request.data.get('first_name')
 
     # 1. Kod va telefonni tekshirish
@@ -125,30 +125,44 @@ def create_company(request):
 
     return Response({"success": True, "message": "Kompaniya va 7 kunlik demo reja muvaffaqiyatli yaratildi!"})
 
-#  Tizimga kirish (Login) - CHEKINISHLARI TO'G'RILANGAN VARIANT
+
+# organization/views.py
+from rest_framework_simplejwt.tokens import RefreshToken
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login_employee(request):
     phone = request.data.get('phone')
     password = request.data.get('password')
+
     try:
         employee = Employee.objects.get(phone=phone, is_verified=True)
     except Employee.DoesNotExist:
         return Response({"error": "Foydalanuvchi topilmadi!"}, status=404)
+
     if not check_password(password, employee.password):
         return Response({"error": "Parol noto'g'ri!"}, status=400)
+
+    # Subskripsiyani tekshirish
     sub = CompanySubscription.objects.filter(company=employee.company, status__in=['active', 'trialing']).last()
     if not sub or sub.end_date < timezone.now():
         if sub:
             sub.status = 'expired'
             sub.save()
         return Response({"error": "Sizning tarif muddatingiz tugagan! Iltimos to'lov qiling."}, status=402)
-    refresh = RefreshToken()
+
+    #  SIMPLE JWT STANDARTI BO'YICHA TOKEN YARATISH:
+    # Bu usul token turlarini (Access/Refresh) aralashtirib yubormaydi va buzilmaydi
+    refresh = RefreshToken.for_user(employee)
+
+    # TenantViewSetMixin taniy olishi va token yaroqli bo'lishi uchun:
     refresh['user_id'] = employee.id
     refresh['username'] = employee.phone
+
     return Response({
         "success": True,
-        "token": str(refresh.access_token),
+        "token": str(refresh.access_token),  # Mana bu haqiqiy, tasdiqlangan Access Token
         "refresh_token": str(refresh),
         "user": {
             "id": employee.id,
@@ -157,8 +171,6 @@ def login_employee(request):
             "company": employee.company.name if employee.company else None
         }
     }, status=status.HTTP_200_OK)
-
-
 # Parolni unutganda kod yuborish
 @api_view(['POST'])
 @permission_classes([AllowAny])
