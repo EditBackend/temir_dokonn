@@ -90,10 +90,15 @@ REST_FRAMEWORK = {
 
 # JWT token muddatlarini uzaytirish (Frontendchi har 5 daqiqada login qilmasligi uchun)
 from datetime import timedelta
+
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),   # 1 kun amal qiladi
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),  # 7 kun amal qiladi
-    'AUTH_HEADER_TYPES': ('Bearer',),             # Faqat 'Bearer <token>'ni qabul qiladi
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'AUTH_HEADER_TYPES': ('Bearer',),
+
+    #  MANA SHU IKKI QATORNI QO'SHING:
+    'USER_MODEL': 'organization.Employee',  # Simple JWT foydalanuvchini qayerdan qidirishi kerakligi
+    'USER_ID_FIELD': 'id',  # Modelning asosiy kaliti
 }
 
 
