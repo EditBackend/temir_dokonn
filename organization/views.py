@@ -152,17 +152,15 @@ def login_employee(request):
             sub.save()
         return Response({"error": "Sizning tarif muddatingiz tugagan! Iltimos to'lov qiling."}, status=402)
 
-    #  SIMPLE JWT STANDARTI BO'YICHA TOKEN YARATISH:
-    # Bu usul token turlarini (Access/Refresh) aralashtirib yubormaydi va buzilmaydi
+    # TOZA JWT TOKEN: Hech qanday aylanma yo'llarsiz, to'g'ridan-to'g'ri xodim uchun token generatsiya bo'ladi
     refresh = RefreshToken.for_user(employee)
 
-    # TenantViewSetMixin taniy olishi va token yaroqli bo'lishi uchun:
+    # Token ichiga TenantViewSetMixin taniy oladigan xodim ID'sini majburiy joylaymiz
     refresh['user_id'] = employee.id
-    refresh['username'] = employee.phone
 
     return Response({
         "success": True,
-        "token": str(refresh.access_token),  # Mana bu haqiqiy, tasdiqlangan Access Token
+        "token": str(refresh.access_token),
         "refresh_token": str(refresh),
         "user": {
             "id": employee.id,
@@ -171,6 +169,8 @@ def login_employee(request):
             "company": employee.company.name if employee.company else None
         }
     }, status=status.HTTP_200_OK)
+
+
 # Parolni unutganda kod yuborish
 @api_view(['POST'])
 @permission_classes([AllowAny])
