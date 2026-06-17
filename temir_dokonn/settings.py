@@ -95,11 +95,12 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'AUTH_HEADER_TYPES': ('Bearer',),
-
-    #  MANA SHU IKKI QATORNI QO'SHING:
-    'USER_MODEL': 'organization.Employee',  # Simple JWT foydalanuvchini qayerdan qidirishi kerakligi
-    'USER_ID_FIELD': 'id',  # Modelning asosiy kaliti
+    'USER_MODEL': 'organization.Employee',
+    'USER_ID_FIELD': 'id',
 }
+
+
+
 
 
 
