@@ -511,7 +511,7 @@ class Payment(TenantModel):
 
                 self.customer.save()
 
-        # 2. Asosiy save funksiyasini chaqirish
+        #  Asosiy save funksiyasini chaqirish
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -525,8 +525,8 @@ class ArchivedItem(TenantModel):
         ('product', 'Mahsulot'),
         ('category', 'Kategoriya'),
         ('employee', 'Xodim'),
-        ('customer', 'Mijoz'),  #  yangi qo'shildi
-        ('role', 'Rol'),  #  yangi qo'shildi
+        ('customer', 'Mijoz'),
+        ('role', 'Rol'),
     ]
 
     item_type = models.CharField(max_length=50, choices=ITEM_TYPES, verbose_name="Tur")

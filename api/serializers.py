@@ -5,12 +5,41 @@ from .models import Product, Sale, Category, Supplier, WarehouseIncome, Customer
 
 User = get_user_model()
 
+
 class UnitSerializer(serializers.ModelSerializer):
     class Meta:
         model = Unit
         fields = '__all__'
+        # 🟢 STANDART UNIQUE VALIDATORNI O'CHIRAMIZ (Kompaniyalar bir-biriga xalaqit bermasligi uchun):
+        extra_kwargs = {
+            'name': {'validators': []},
+            'short_name': {'validators': []}  # Agar modelda short_name bo'lsa, buni ham qo'shing
+        }
 
+    def validate(self, attrs):
+        request = self.context.get('request')
+        # Tizimga kirgan xodim (request.user) orqali uning kompaniyasini topamiz
+        company = request.user.company if request and hasattr(request.user, 'company') else None
 
+        name = attrs.get('name')
+        short_name = attrs.get('short_name')
+
+        #  VALIDATSIYA: "Kilogram" aynan SHU KOMPANIYADA oldin yaratilganmi yoki yo'qmi, shuni tekshiramiz
+        if company:
+            # Ustun nomlari modelingizda qanday bo'lsa shunday yozing (masalan name yoki title)
+            if Unit.objects.filter(company=company, name=name).exists():
+                raise serializers.ValidationError({
+                    "name": "Bu o'lchov birligi sizning kompaniyangizda allaqachon mavjud!"
+                })
+
+        return attrs
+
+    def create(self, validated_data):
+        # Maxfiy xavfsizlik: Birlik yaratilayotganda unga avtomatik joriy kompaniyani biriktiramiz
+        request = self.context.get('request')
+        if request and hasattr(request.user, 'company'):
+            validated_data['company'] = request.user.company
+        return super().create(validated_data)
 class RoleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Role
