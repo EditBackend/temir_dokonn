@@ -75,11 +75,13 @@ SESSION_COOKIE_SECURE = True
 
 
 # settings.py
+# temir_dokonn/settings.py
+
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 1000,
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        #  STANDART KLASS O'RNIGA O'ZIMIZNING KLASSNI ULAYMIZ:
+        #  STANDART JWT AUTH O'RNIGA O'ZIMIZNING KLASSNI QO'YAMIZ:
         'organization.authentication.EmployeeJWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ),
@@ -132,6 +134,7 @@ TEMPLATES = [
 #     }
 # }
 #
+
 DATABASES = {
     'default': dj_database_url.config(
         default=os.environ.get(
@@ -155,5 +158,7 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+
 
 
