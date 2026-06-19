@@ -12,6 +12,8 @@ from django.db import transaction
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 from rest_framework.views import APIView
+
+from organization.authentication import EmployeeJWTAuthentication
 from .serializers import ExpenseCategorySerializer
 from .utils import send_telegram_message
 import statistics
@@ -282,6 +284,7 @@ class RoleDetailView(APIView):
 
 
 class UnitViewSet(TenantViewSetMixin, viewsets.ModelViewSet):
+    authentication_classes = [EmployeeJWTAuthentication]
     permission_classes = [IsAuthenticated]
     queryset = Unit.objects.all()
     serializer_class = UnitSerializer
@@ -584,6 +587,7 @@ class BatchViewSet(TenantViewSetMixin, viewsets.ModelViewSet):
 
 
 class CustomerViewSet(TenantViewSetMixin, ModelViewSet):
+    authentication_classes = [EmployeeJWTAuthentication]
     permission_classes = [IsAuthenticated]
     queryset = Customer.objects.all().order_by("-id")
     serializer_class = CustomerSerializer
@@ -641,6 +645,7 @@ class CategoryViewSet(TenantViewSetMixin, ModelViewSet):
 
 
 class ProductViewSet(TenantViewSetMixin, ModelViewSet):
+    authentication_classes = [EmployeeJWTAuthentication]
     permission_classes = [IsAuthenticated]
     serializer_class = ProductSerializer
 

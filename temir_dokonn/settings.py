@@ -77,13 +77,16 @@ SESSION_COOKIE_SECURE = True
 # settings.py
 # temir_dokonn/settings.py
 
+# temir_dokonn/settings.py
+
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 1000,
+
+    #  BU RO'YXATDAN O'ZIMIZNING KLASSNI OLIB TASHLAREK:
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        #  STANDART JWT AUTH O'RNIGA O'ZIMIZNING KLASSNI QO'YAMIZ:
-        'organization.authentication.EmployeeJWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
+        # Global JWT klasslari bu yerda turmasligi kerak!
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
