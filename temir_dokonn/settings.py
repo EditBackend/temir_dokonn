@@ -79,19 +79,27 @@ SESSION_COOKIE_SECURE = True
 
 # temir_dokonn/settings.py
 
+# temir_dokonn/settings.py
+
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 1000,
-
-    #  BU RO'YXATDAN O'ZIMIZNING KLASSNI OLIB TASHLAREK:
+    #  STANDART JWT ENCRYPTION'NI QAYTARAMIZ (Hech qanday maxsus klasslarsiz)
     'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
-        # Global JWT klasslari bu yerda turmasligi kerak!
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
-    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# 🟢 SIMPLE_JWT ga o'zingizning modelingizni to'g'ri ko'rsatish:
+SIMPLE_JWT = {
+    'USER_MODEL': 'organization.Employee',  # Sizning xodimlar modelingiz yo'li
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
+    # Qolgan sozlamalar o'zgarishsiz qoladi...
 }
 
 # JWT token muddatlarini uzaytirish (Frontendchi har 5 daqiqada login qilmasligi uchun)

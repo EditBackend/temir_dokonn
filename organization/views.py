@@ -7,6 +7,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.response import Response
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework import status
 from .models import Company, Employee, TariffPlan, CompanySubscription, VerificationCode
 
@@ -126,8 +127,6 @@ def create_company(request):
     return Response({"success": True, "message": "Kompaniya va 7 kunlik demo reja muvaffaqiyatli yaratildi!"})
 
 
-# organization/views.py
-from rest_framework_simplejwt.tokens import RefreshToken
 
 
 @api_view(['POST'])
@@ -144,19 +143,16 @@ def login_employee(request):
     if not check_password(password, employee.password):
         return Response({"error": "Parol noto'g'ri!"}, status=400)
 
-    # Subskripsiyani tekshirish
+
     sub = CompanySubscription.objects.filter(company=employee.company, status__in=['active', 'trialing']).last()
     if not sub or sub.end_date < timezone.now():
         if sub:
             sub.status = 'expired'
             sub.save()
-        return Response({"error": "Sizning tarif muddatingiz tugagan! Iltimos to'lov qiling."}, status=402)
+        return Response({"error": "Sizning tarif muddatingiz tugagan!"}, status=402)
 
-    # TOZA JWT TOKEN: Hech qanday aylanma yo'llarsiz, to'g'ridan-to'g'ri xodim uchun token generatsiya bo'ladi
+
     refresh = RefreshToken.for_user(employee)
-
-    # Token ichiga TenantViewSetMixin taniy oladigan xodim ID'sini majburiy joylaymiz
-    refresh['user_id'] = employee.id
 
     return Response({
         "success": True,
@@ -169,6 +165,7 @@ def login_employee(request):
             "company": employee.company.name if employee.company else None
         }
     }, status=status.HTTP_200_OK)
+
 
 
 # Parolni unutganda kod yuborish
