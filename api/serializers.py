@@ -5,38 +5,20 @@ from .models import Product, Sale, Category, Supplier, WarehouseIncome, Customer
 
 User = get_user_model()
 
-# api/serializers.py
-from rest_framework import serializers
-from .models import Unit
 
 
 class UnitSerializer(serializers.ModelSerializer):
-    # 🟢 COMPANIYANI READ_ONLY QILAMIZ: Frontendchi uni majburiy jo'natishi shart bo'lmaydi
+
     company = serializers.PrimaryKeyRelatedField(read_only=True)
 
     class Meta:
         model = Unit
         fields = '__all__'
-        # 🟢 Global unique validatorlarni butunlay o'chiramiz
+        # Model darajasidagi global unique validatorlarni o'chirib turamiz
         extra_kwargs = {
             'name': {'validators': []},
             'short_name': {'validators': []}
         }
-
-    def validate(self, attrs):
-        request = self.context.get('request')
-        # Tizimga kirgan xodimning kompaniyasini aniqlaymiz
-        company = request.user.company if request and hasattr(request.user, 'company') else None
-
-        name = attrs.get('name')
-
-        #  Faqat shu kompaniyaning ichida shu nomli birlik borligini tekshiramiz
-        if company and Unit.objects.filter(company=company, name=name).exists():
-            raise serializers.ValidationError({
-                "name": "Bu o'lchov birligi kompaniyangizda allaqachon yaratilgan!"
-            })
-
-        return attrs
 
     def create(self, validated_data):
         # 🟢 O'lchov birligi yaratilayotganda orqa fonda joriy xodimning kompaniyasini yopishtiramiz

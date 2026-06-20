@@ -73,18 +73,12 @@ SESSION_COOKIE_SECURE = True
 
 
 
-
-# settings.py
-# temir_dokonn/settings.py
-
-# temir_dokonn/settings.py
-
 # temir_dokonn/settings.py
 
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 1000,
-    #  STANDART JWT ENCRYPTION'NI QAYTARAMIZ (Hech qanday maxsus klasslarsiz)
+    #  Djangoning o'z standart SimpleJWT va Session autentifikatsiyasini qaytaramiz
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
@@ -92,15 +86,17 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
-# 🟢 SIMPLE_JWT ga o'zingizning modelingizni to'g'ri ko'rsatish:
+# 🟢 Simple JWT ga sizning xodimlar modelingizni to'g'ri ulab qo'yamiz:
 SIMPLE_JWT = {
-    'USER_MODEL': 'organization.Employee',  # Sizning xodimlar modelingiz yo'li
+    'USER_MODEL': 'organization.Employee',  # Token qidiriladigan asosiy model
     'USER_ID_FIELD': 'id',
     'USER_ID_CLAIM': 'user_id',
-    # Qolgan sozlamalar o'zgarishsiz qoladi...
+    # Qolgan token muddati (LIFETIME) sozlamalaringiz bo'lsa, pastidan o'zgarishsiz qolaversin...
 }
+
 
 # JWT token muddatlarini uzaytirish (Frontendchi har 5 daqiqada login qilmasligi uchun)
 from datetime import timedelta
