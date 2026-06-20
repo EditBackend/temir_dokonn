@@ -162,13 +162,24 @@ class Category(TenantModel):
     def __str__(self):
         return self.name
 
-# O'lchov birligi uchun
+
+
+
 class Unit(TenantModel):
-    name = models.CharField(max_length=50, unique=True, verbose_name="O'lchov birligi nomi")
-    short_name = models.CharField(max_length=10, blank=True, null=True, verbose_name="Qisqartma nomi") # masalan: kg, l
+
+
+    name = models.CharField(max_length=50, verbose_name="O'lchov birligi nomi")
+    short_name = models.CharField(max_length=10, blank=True, null=True, verbose_name="Qisqartma nomi")
+
+    class Meta:
+
+
+        unique_together = ('company', 'name')
 
     def __str__(self):
         return self.name
+
+
 
 class PaymentType(TenantModel):
     name = models.CharField(max_length=50, unique=True, verbose_name="To'lov turi nomi")

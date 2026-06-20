@@ -6,28 +6,35 @@ from .models import Product, Sale, Category, Supplier, WarehouseIncome, Customer
 User = get_user_model()
 
 
-
 class UnitSerializer(serializers.ModelSerializer):
-
     company = serializers.PrimaryKeyRelatedField(read_only=True)
 
     class Meta:
         model = Unit
         fields = '__all__'
-        # Model darajasidagi global unique validatorlarni o'chirib turamiz
         extra_kwargs = {
             'name': {'validators': []},
             'short_name': {'validators': []}
         }
 
+    def validate(self, attrs):
+        request = self.context.get('request')
+        if request and hasattr(request.user, 'company'):
+            company = request.user.company
+            name = attrs.get('name')
+
+            #  Bazaga borishdan oldin xavfsizlik tekshiruvi:
+            if Unit.objects.filter(company=company, name=name).exists():
+                raise serializers.ValidationError({
+                    "name": "Sizning kompaniyangizda ushbu o'lchov birligi allaqachon mavjud!"
+                })
+        return attrs
+
     def create(self, validated_data):
-        # 🟢 O'lchov birligi yaratilayotganda orqa fonda joriy xodimning kompaniyasini yopishtiramiz
         request = self.context.get('request')
         if request and hasattr(request.user, 'company'):
             validated_data['company'] = request.user.company
         return super().create(validated_data)
-
-
 class RoleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Role
