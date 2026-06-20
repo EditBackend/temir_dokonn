@@ -1222,58 +1222,48 @@ def login_employee(request):
 class EmployeeViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Employee.objects.all()
-
     # serializer_class = EmployeeSerializer
 
     def destroy(self, request, *args, **kwargs):
-        instance = self.get_object()
-
-        # 🔐 XAVFSIZLIK: Hech kim o'z-o'zini o'chira olmaydi
-        if request.user.id == instance.id:
-            return Response({
-                "success": False,
-                "error": "Siz o'z profilingizni o'chira olmaysiz!"
-            }, status=400)
-
-        #  XAVFSIZLIK: CEO (Kompaniya rahbari) ni o'chirish taqiqlanadi
-        if instance.is_ceo:
-            return Response({
-                "success": False,
-                "error": "Kompaniya rahbarini (CEO) o'chirish taqiqlanadi!"
-            }, status=400)
-
         try:
-            # 1-YOL: Uni bazadan butunlay o'chirish (Agar boshqa narsaga bog'lanmagan bo'lsa)
+            instance = self.get_object()
+
+            # 🔐 1. O'z-o'zini o'chirishni tekshirish
+            if request.user.id == instance.id:
+                return Response({
+                    "success": False,
+                    "error": "Siz o'z profilingizni o'chira olmaysiz!"
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # 🔐 2. CEO'ni o'chirishni tekshirish
+            if getattr(instance, 'is_ceo', False):
+                return Response({
+                    "success": False,
+                    "error": "Kompaniya rahbarini (CEO) o'chirish taqiqlanadi!"
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # 🔐 3. Bazadan o'chirishga harakat qilamiz
             instance.delete()
-            return Response({"success": True, "message": "Xodim muvaffaqiyatli o'chirildi"}, status=200)
-
-        except ProtectedError:
-            # 2-YOL (Eng xavfsiz yo'l): Agar xodim savdo yoki cheklarga bog'langan bo'lsa,
-            # uni o'chirmaymiz, shunchaki tizimga kira olmaydigan qilib bloklaymiz (is_active=False)
-            instance.is_active = False
-            instance.save()
-
-            # Agar sizda o'sha boyagi ArchivedItem modeli xodimlar uchun ham ishlatilsa:
-            try:
-                from api.models import ArchivedItem
-                obj_name = getattr(instance, 'name', str(instance))
-                ArchivedItem.objects.create(
-                    item_type='employee',
-                    name=obj_name,
-                    original_id=instance.id,
-                    status="Bloklandi (Arxiv)",
-                    company=request.user.company
-                )
-            except Exception:
-                pass  # Agar ArchivedItem da employee tipi bo'lmasa, o'tib ketadi
-
             return Response({
                 "success": True,
-                "message": "Xodim eski savdolarga bog'langani sababli bloklandi va arxivga joylandi!"
-            }, status=200)
+                "message": "Xodim muvaffaqiyatli o'chirildi"
+            }, status=status.HTTP_200_OK)
+
+        except ProtectedError:
+            # 🔐 4. Agar boshqa jadvallarga (savdo, kassa) bog'langan bo'lsa, 500 bermasdan bloklaymiz
+            instance.is_active = False
+            instance.save()
+            return Response({
+                "success": True,
+                "message": "Xodim savdolarga bog'langani sababli tizimdan o'chirilmadi, lekin faoliyati bloklandi."
+            }, status=status.HTTP_200_OK)
 
         except Exception as e:
-            return Response({"success": False, "error": str(e)}, status=400)
+            #  5. Har qanday kutilmagan xatoni 500 qilmasdan, frontendga 400 qilib qaytaramiz
+            return Response({
+                "success": False,
+                "error": f"O'chirishda xatolik yuz berdi: {str(e)}"
+            }, status=status.HTTP_400_BAD_REQUEST)
 # ROLE uchun crud amallari
 class RoleViewSet(ModelViewSet):
     queryset = Role.objects.all()
