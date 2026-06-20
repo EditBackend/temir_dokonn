@@ -1,7 +1,7 @@
 """
 Django settings for temir_dokonn project.
 """
-
+from datetime import timedelta
 from pathlib import Path
 import dj_database_url
 import os
@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     'organization',
 ]
 
+AUTH_USER_MODEL = 'organization.Employee'
 # ========================
 # MIDDLEWARE
 # ========================
@@ -89,24 +90,14 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
-# 🟢 Simple JWT ga sizning xodimlar modelingizni to'g'ri ulab qo'yamiz:
-SIMPLE_JWT = {
-    'USER_MODEL': 'organization.Employee',  # Token qidiriladigan asosiy model
-    'USER_ID_FIELD': 'id',
-    'USER_ID_CLAIM': 'user_id',
-    # Qolgan token muddati (LIFETIME) sozlamalaringiz bo'lsa, pastidan o'zgarishsiz qolaversin...
-}
-
-
-# JWT token muddatlarini uzaytirish (Frontendchi har 5 daqiqada login qilmasligi uchun)
-from datetime import timedelta
-
+#  Ikkita alohida SIMPLE_JWT bloklarini o'chirib, o'rniga faqat bitta mana shuni qoldiring:
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'AUTH_HEADER_TYPES': ('Bearer',),
     'USER_MODEL': 'organization.Employee',
     'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id', # Buni ham qo'shib qo'ying
 }
 
 
