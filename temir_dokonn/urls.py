@@ -9,12 +9,15 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('api.urls')),
     path('api/', include('organization.urls')),
+
+
     # path("api/", include("ai.urls")),
-    path('', home),  # root URL
+    path('', home),
     path('api/', include('organization.urls')),
 ]
 
-# Media va static fayllarni lokalda ishlatish uchun
+
+
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

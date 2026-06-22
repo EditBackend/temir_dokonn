@@ -90,7 +90,8 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
-#  Ikkita alohida SIMPLE_JWT bloklarini o'chirib, o'rniga faqat bitta mana shuni qoldiring:
+
+AUTH_USER_MODEL = 'organization.Employee'
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),

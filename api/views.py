@@ -12,8 +12,6 @@ from django.db import transaction
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 from rest_framework.views import APIView
-
-
 from .serializers import ExpenseCategorySerializer
 from .utils import send_telegram_message
 import statistics
@@ -125,7 +123,6 @@ def customer_profile_details(request, customer_id):
     current_company = request.user.company
 
     try:
-        # Mijozni faqat o'z kompaniyangizdan qidirish xavfsizligi
         customer = Customer.objects.get(pk=customer_id, company=current_company)
     except Customer.DoesNotExist:
         return Response({"success": False, "error": "Mijoz topilmadi yoki sizga tegishli emas"}, status=404)
@@ -462,20 +459,6 @@ class ProductsTableView(APIView):
         return Response({"success": True, "data": result})
 
 
-# @api_view(['GET'])
-# def top_products(request):
-#     # Bu yerda ham Sale modeliga o'tamiz
-#     data = (
-#         Sale.objects.values('product__name')
-#         .annotate(total=Sum('total_price'))
-#         .order_by('-total')[:10]
-#     )
-#     return Response({
-#         "success": True,
-#         "data": [{"product": i['product__name'], "total": i['total']} for i in data]
-#     })
-
-
 
 #boshliq uchun expences oynasi
 class ExpenseViewSet(TenantViewSetMixin, ModelViewSet):
@@ -652,12 +635,12 @@ class ProductViewSet(TenantViewSetMixin, ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = ProductSerializer
 
-    #  XATOLIKNI TUZATUVCHI ASOSIY QATOR (Baza so'rovi shu yerda bo'lishi shart):
+
     queryset = Product.objects.all()
 
     def get_queryset(self):
-        # Endi super().get_queryset() portlamaydi, chunki yuqorida queryset bor!
-        # TenantViewSetMixin uni avtomat ravishda faqat shu xodim kompaniyasiga filtrlab beradi.
+
+
         queryset = super().get_queryset()
 
         category_id = self.request.query_params.get("category")
@@ -1334,36 +1317,8 @@ def cash_flow(request):
         "foyda": profit
     })
 
-# CASH FLOW TREND (chart uchun)
-# @api_view(['GET'])
-# def cash_flow_trend(request):
-#
-#     sana_from = request.GET.get('sana_from')
-#     sana_to = request.GET.get('sana_to')
-#
-#     sales = Sale.objects.all()
-#     incomes = WarehouseIncome.objects.all()
-#
-#     if sana_from and sana_to:
-#         sales = sales.filter(created_at__date__range=[sana_from, sana_to])
-#         incomes = incomes.filter(created_at__date__range=[sana_from, sana_to])
-#
-#     sales_data = sales.annotate(
-#         date=TruncDate('created_at')
-#     ).values('date').annotate(
-#         total_in=Sum('total_price')
-#     ).order_by('date')
-#
-#     expense_data = incomes.annotate(
-#         date=TruncDate('created_at')
-#     ).values('date').annotate(
-#         total_out=Sum('total_price')
-#     ).order_by('date')
-#
-#     return Response({
-#         "sales": sales_data,
-#         "expenses": expense_data
-#     })
+
+
 
 
 # CASH FLOW DAILY TABLE
@@ -1545,57 +1500,6 @@ def activity_list(request):
 
     return Response(result)
 
-
-# @api_view(['GET'])
-# def dashboard(request):
-#     sana_from = request.GET.get('sana_from')
-#     sana_to = request.GET.get('sana_to')
-#
-#     # ===== CASH FLOW =====
-#     sales = Sale.objects.all()
-#     incomes = WarehouseIncome.objects.all()
-#
-#     if sana_from and sana_to:
-#         sales = sales.filter(created_at__date__range=[sana_from, sana_to])
-#         incomes = incomes.filter(created_at__date__range=[sana_from, sana_to])
-#
-#     total_income = sales.aggregate(total=Sum('total_price'))['total'] or 0
-#     total_expense = incomes.aggregate(total=Sum('total_price'))['total'] or 0
-#     profit = total_income - total_expense
-#
-#     # ===== TREND =====
-#     sales_trend = sales.annotate(
-#         date=TruncDate('created_at')
-#     ).values('date').annotate(
-#         total=Sum('total_price')
-#     ).order_by('date')
-#
-#     expenses_trend = incomes.annotate(
-#         date=TruncDate('created_at')
-#     ).values('date').annotate(
-#         total=Sum('total_price')
-#     ).order_by('date')
-#
-#     # ===== CATEGORY =====
-#     categories = WarehouseIncome.objects.values(
-#         'product__category__name'
-#     ).annotate(
-#         total=Sum('total_price')
-#     )
-#
-#     # ===== RESPONSE =====
-#     return Response({
-#         "summary": {
-#             "kirim": total_income,
-#             "chiqim": total_expense,
-#             "foyda": profit
-#         },
-#         "trend": {
-#             "sales": sales_trend,
-#             "expenses": expenses_trend
-#         },
-#         "categories": categories
-#     })
 
 
 
