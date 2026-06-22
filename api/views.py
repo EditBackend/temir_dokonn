@@ -1222,48 +1222,28 @@ def login_employee(request):
 class EmployeeViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Employee.objects.all()
-    # serializer_class = EmployeeSerializer
+    serializer_class = EmployeeSerializer
 
     def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+
+        # O'zini o'chira olmaydi
+        if request.user.id == instance.id:
+            return Response({"error": "Siz o'z profilingizni o'chira olmaysiz!"}, status=400)
+
         try:
-            instance = self.get_object()
-
-            # 🔐 1. O'z-o'zini o'chirishni tekshirish
-            if request.user.id == instance.id:
-                return Response({
-                    "success": False,
-                    "error": "Siz o'z profilingizni o'chira olmaysiz!"
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-            # 🔐 2. CEO'ni o'chirishni tekshirish
-            if getattr(instance, 'is_ceo', False):
-                return Response({
-                    "success": False,
-                    "error": "Kompaniya rahbarini (CEO) o'chirish taqiqlanadi!"
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-            # 🔐 3. Bazadan o'chirishga harakat qilamiz
+            # Bazadan o'chirishga urinamiz
             instance.delete()
-            return Response({
-                "success": True,
-                "message": "Xodim muvaffaqiyatli o'chirildi"
-            }, status=status.HTTP_200_OK)
-
-        except ProtectedError:
-            # 🔐 4. Agar boshqa jadvallarga (savdo, kassa) bog'langan bo'lsa, 500 bermasdan bloklaymiz
+            return Response({"success": True, "message": "Xodim o'chirildi"}, status=200)
+        except Exception:
+            # Agar savdolarga bog'lanib qolgan bo'lsa, xato bermaymizda, bloklab qo'yamiz
             instance.is_active = False
             instance.save()
-            return Response({
-                "success": True,
-                "message": "Xodim savdolarga bog'langani sababli tizimdan o'chirilmadi, lekin faoliyati bloklandi."
-            }, status=status.HTTP_200_OK)
+            return Response({"success": True, "message": "Xodim bloklandi (arxivlandi)"}, status=200)
 
-        except Exception as e:
-            #  5. Har qanday kutilmagan xatoni 500 qilmasdan, frontendga 400 qilib qaytaramiz
-            return Response({
-                "success": False,
-                "error": f"O'chirishda xatolik yuz berdi: {str(e)}"
-            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+
 # ROLE uchun crud amallari
 class RoleViewSet(ModelViewSet):
     queryset = Role.objects.all()
