@@ -7,7 +7,8 @@ from api.views import home
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/', include('api.urls')),  # API app
+    path('api/', include('api.urls')),
+    path('api/', include('organization.urls')),
     # path("api/", include("ai.urls")),
     path('', home),  # root URL
     path('api/', include('organization.urls')),

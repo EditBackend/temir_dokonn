@@ -7,11 +7,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.response import Response
-from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework import status
 from .models import Company, Employee, TariffPlan, CompanySubscription, VerificationCode
-
-
 
 TELEGRAM_BOT_TOKEN = "8837150918:AAFCLCzlPXILiaktZy8OHP28ynntXlYiRVY"
 TELEGRAM_CHAT_ID = "7724173791"  # Guruh yoki admin ID si
@@ -33,7 +30,7 @@ def send_otp_via_telegram(phone, code):
 def register_request(request):
     phone = request.data.get('phone')
     if not phone:
-        return Response({"error": "Telefon raqam shart!"}, status=400)
+        return Response({"error": "Telefon raqam shart!"}, status=status.HTTP_400_BAD_REQUEST)
 
     # 6 xonali tasodifiy kod yaratish
     code = str(random.randint(100000, 999999))
@@ -51,42 +48,36 @@ def verify_ceo(request):
     phone = request.data.get('phone')
     code = request.data.get('code')
 
-
-    name = request.data.get('name') or request.data.get('first_name')
+    # 🟢 TO'G'RILANDI: Modelda 'name' yo'qligi uchun 'first_name' va 'last_name'ga ajratamiz
+    first_name = request.data.get('first_name') or request.data.get('name') or "CEO"
+    last_name = request.data.get('last_name') or f"_{phone[-4:]}"
 
     # 1. Kod va telefonni tekshirish
     otp = VerificationCode.objects.filter(phone=phone, code=code, is_used=False).order_by('-id').first()
     if not otp or not otp.is_valid():
-        return Response({"error": "Kod noto'g'ri yoki muddati o'tgan!"}, status=400)
-
-    # XAVFSIZLIK: Agar frontendchi baribir ism yubormagan bo'lsa, bazani asrab qolish uchun vaqtinchalik nom beramiz
-    if not name:
-        name = f"CEO_{phone[-4:]}"  # Masalan: CEO_1814 deb yozib ketadi bazaga, keyingi bosqichda to'g'irlasa bo'ladi
-        # Yoki xohlasangiz qattiq tekshiruv qo'ying:
-        # return Response({"error": "Ism-familiya (name) maydoni majburiy!"}, status=400)
+        return Response({"error": "Kod noto'g'ri yoki muddati o'tgan!"}, status=status.HTTP_400_BAD_REQUEST)
 
     otp.is_used = True
     otp.save()
 
-    # Xodim (CEO) sifatida vaqtinchalik saqlash
+    # 🟢 TO'G'RILANDI: 'name' o'rniga model maydonlari 'first_name' va 'last_name' ishlatildi
     employee, created = Employee.objects.get_or_create(
         phone=phone,
         defaults={
-            'name': name,  #  Endi bu yerga null tushmaydi!
+            'first_name': first_name,
+            'last_name': last_name,
             'is_ceo': True,
             'is_verified': True,
             'password': make_password('temporary_pass')
         }
     )
 
-    # Agar xodim allaqachon mavjud bo'lsa-yu, lekin ismi o'zgargan bo'lsa yangilab qo'yamiz
-    if not created and employee.name != name:
-        employee.name = name
+    if not created:
+        employee.first_name = first_name
+        employee.last_name = last_name
         employee.save()
 
     return Response({"success": True, "message": "Telefon raqam tasdiqlandi. Endi kompaniya yarating."})
-
-
 
 
 # Kompaniya yaratish va 7 kunlik demo berish
@@ -100,7 +91,8 @@ def create_company(request):
     try:
         employee = Employee.objects.get(phone=phone, is_verified=True, company__isnull=True)
     except Employee.DoesNotExist:
-        return Response({"error": "Avval telefon raqamni tasdiqlang yoki kompaniya allaqachon ochilgan!"}, status=400)
+        return Response({"error": "Avval telefon raqamni tasdiqlang yoki kompaniya allaqachon ochilgan!"},
+                        status=status.HTTP_400_BAD_REQUEST)
 
     # Kompaniya ochish
     company = Company.objects.create(name=company_name, phone=phone)
@@ -127,8 +119,6 @@ def create_company(request):
     return Response({"success": True, "message": "Kompaniya va 7 kunlik demo reja muvaffaqiyatli yaratildi!"})
 
 
-
-
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login_employee(request):
@@ -138,19 +128,17 @@ def login_employee(request):
     try:
         employee = Employee.objects.get(phone=phone, is_verified=True)
     except Employee.DoesNotExist:
-        return Response({"error": "Foydalanuvchi topilmadi!"}, status=404)
+        return Response({"error": "Foydalanuvchi topilmadi!"}, status=status.HTTP_404_NOT_FOUND)
 
     if not check_password(password, employee.password):
-        return Response({"error": "Parol noto'g'ri!"}, status=400)
-
+        return Response({"error": "Parol noto'g'ri!"}, status=status.HTTP_400_BAD_REQUEST)
 
     sub = CompanySubscription.objects.filter(company=employee.company, status__in=['active', 'trialing']).last()
     if not sub or sub.end_date < timezone.now():
         if sub:
             sub.status = 'expired'
             sub.save()
-        return Response({"error": "Sizning tarif muddatingiz tugagan!"}, status=402)
-
+        return Response({"error": "Sizning tarif muddatingiz tugagan!"}, status=status.HTTP_402_PAYMENT_REQUIRED)
 
     refresh = RefreshToken.for_user(employee)
 
@@ -160,12 +148,13 @@ def login_employee(request):
         "refresh_token": str(refresh),
         "user": {
             "id": employee.id,
-            "name": employee.name,
+            # 🟢 TO'G'RILANDI: 'name' o'rniga ism-familiya birlashtirildi
+            "first_name": employee.first_name,
+            "last_name": employee.last_name,
             "is_ceo": employee.is_ceo,
             "company": employee.company.name if employee.company else None
         }
     }, status=status.HTTP_200_OK)
-
 
 
 # Parolni unutganda kod yuborish
@@ -174,7 +163,8 @@ def login_employee(request):
 def forget_password(request):
     phone = request.data.get('phone')
     if not Employee.objects.filter(phone=phone).exists():
-        return Response({"error": "Bu raqamli xodim tizimda yo'q!"}, status=44)
+        # 🟢 TO'G'RILANDI: status=44 noto'g'ri xato o'rniga toza HTTP_400 qo'yildi
+        return Response({"error": "Bu raqamli xodim tizimda yo'q!"}, status=status.HTTP_400_BAD_REQUEST)
 
     code = str(random.randint(100000, 999999))
     VerificationCode.objects.create(phone=phone, code=code)
@@ -183,7 +173,7 @@ def forget_password(request):
     return Response({"success": True, "message": "Parolni tiklash kodi Telegram botga yuborildi."})
 
 
-# Yangi parolni saqlash
+# Yangi parolingizni saqlash
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def reset_password(request):
@@ -193,13 +183,15 @@ def reset_password(request):
 
     otp = VerificationCode.objects.filter(phone=phone, code=code, is_used=False).order_by('-id').first()
     if not otp or not otp.is_valid():
-        return Response({"error": "Kod xato yoki muddati o'tgan!"}, status=400)
+        return Response({"error": "Kod xato yoki muddati o'tgan!"}, status=status.HTTP_400_BAD_REQUEST)
 
     otp.is_used = True
     otp.save()
 
-    employee = Employee.objects.get(phone=phone)
-    employee.password = make_password(new_password)
-    employee.save()
-
-    return Response({"success": True, "message": "Parolingiz muvaffaqiyatli yangilandi!"})
+    try:
+        employee = Employee.objects.get(phone=phone)
+        employee.password = make_password(new_password)
+        employee.save()
+        return Response({"success": True, "message": "Parolingiz muvaffaqiyatli yangilandi!"})
+    except Employee.DoesNotExist:
+        return Response({"error": "Foydalanuvchi topilmadi!"}, status=status.HTTP_404_NOT_FOUND)

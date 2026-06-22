@@ -69,10 +69,11 @@ class EmployeeCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Employee
-        # 🟢 XATO TO'G'RILANDI: Modelda 'name' yo'q edi. O'rniga 'first_name' va 'last_name' qo'shildi!
+
+
         fields = [
             'id', 'first_name', 'last_name', 'phone', 'password',
-            'is_active', 'role', 'role_name', 'is_ceo', 'is_verified'
+            'is_active', 'role', 'role_name'
         ]
         extra_kwargs = {
             'role': {'required': False}
@@ -109,11 +110,13 @@ class EmployeeCreateSerializer(serializers.ModelSerializer):
         password = validated_data.pop('password', None)
         request = self.context.get('request')
 
+        # Kompaniyani biriktirish
         if request and hasattr(request.user, 'company'):
             validated_data['company'] = request.user.company
 
         employee = Employee.objects.create(**validated_data)
 
+        # Parolni xavfsiz hashlab saqlash
         if password:
             employee.set_password(password)
             employee.save()
@@ -122,8 +125,6 @@ class EmployeeCreateSerializer(serializers.ModelSerializer):
 
 
 EmployeeSerializer = EmployeeCreateSerializer
-
-
 
 #  Mahsulotlar uchun to'g'rilangan serializer
 class ProductSerializer(serializers.ModelSerializer):
