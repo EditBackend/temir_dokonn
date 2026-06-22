@@ -65,13 +65,15 @@ class RoleSerializer(serializers.ModelSerializer):
 
 class EmployeeCreateSerializer(serializers.ModelSerializer):
     role_name = serializers.CharField(source='role.name', required=False, default="-")
-    # 🟢 Parolni fields ro'yxatida ishlata olishimiz uchun majburiy yozamiz:
     password = serializers.CharField(write_only=True, required=False)
 
     class Meta:
         model = Employee
-        # 🟢 XATO TO'G'RILANDI: 'login' o'rniga 'phone' qo'yildi va 'password' ro'yxatga qo'shildi!
-        fields = ['id', 'name', 'phone', 'password', 'is_active', 'role', 'role_name', 'is_ceo', 'is_verified']
+        # 🟢 XATO TO'G'RILANDI: Modelda 'name' yo'q edi. O'rniga 'first_name' va 'last_name' qo'shildi!
+        fields = [
+            'id', 'first_name', 'last_name', 'phone', 'password',
+            'is_active', 'role', 'role_name', 'is_ceo', 'is_verified'
+        ]
         extra_kwargs = {
             'role': {'required': False}
         }
@@ -80,10 +82,8 @@ class EmployeeCreateSerializer(serializers.ModelSerializer):
         role_id = self.initial_data.get('role')
         role_name_input = self.initial_data.get('role_name')
 
-        # Rol modellarini import qilish (O'zingizni model yo'lini to'g'ri tekshiring)
         from .models import Role
 
-        # Variant A: Agar frontendchi Rol ID yuborgan bo'lsa
         if role_id:
             if isinstance(role_id, dict):
                 role_id = role_id.get('id')
@@ -92,7 +92,6 @@ class EmployeeCreateSerializer(serializers.ModelSerializer):
             except (Role.DoesNotExist, ValueError, TypeError):
                 raise serializers.ValidationError({"role": "Bunday Rol ID topilmadi."})
 
-        # Variant B: Agar frontendchi Rol NOMINI yuborgan bo'lsa
         elif role_name_input:
             try:
                 role_obj = Role.objects.filter(name__iexact=str(role_name_input).strip()).first()
@@ -107,18 +106,14 @@ class EmployeeCreateSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        #  PAROLNI TO'G'RI HASHLASH VA SAQLASH:
         password = validated_data.pop('password', None)
         request = self.context.get('request')
 
-        # Xodim yaratayotgan adminning kompaniyasini avtomat biriktiramiz
         if request and hasattr(request.user, 'company'):
             validated_data['company'] = request.user.company
 
-        # Xodimni yaratamiz
         employee = Employee.objects.create(**validated_data)
 
-        # Parol kelgan bo'lsa, uni hashlab saqlaymiz (Tokenlar ishlashi uchun shart!)
         if password:
             employee.set_password(password)
             employee.save()
@@ -127,6 +122,9 @@ class EmployeeCreateSerializer(serializers.ModelSerializer):
 
 
 EmployeeSerializer = EmployeeCreateSerializer
+
+
+
 #  Mahsulotlar uchun to'g'rilangan serializer
 class ProductSerializer(serializers.ModelSerializer):
     # Ham camelCase, ham snake_case qilib ikkala variantini ham beramiz!
