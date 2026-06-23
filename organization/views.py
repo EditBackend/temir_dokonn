@@ -8,7 +8,10 @@ from rest_framework.permissions import AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.response import Response
 from rest_framework import status
-from .models import Company, Employee, TariffPlan, CompanySubscription, VerificationCode
+
+# 🟢 TO'G'RILANDI: Employee modelini 'api' ilovasidan to'g'ri import qildik!
+from api.models import Employee
+from .models import Company, TariffPlan, CompanySubscription, VerificationCode
 
 TELEGRAM_BOT_TOKEN = "8837150918:AAFCLCzlPXILiaktZy8OHP28ynntXlYiRVY"
 TELEGRAM_CHAT_ID = "7724173791"  # Guruh yoki admin ID si
@@ -48,7 +51,6 @@ def verify_ceo(request):
     phone = request.data.get('phone')
     code = request.data.get('code')
 
-    # 🟢 TO'G'RILANDI: Modelda 'name' yo'qligi uchun 'first_name' va 'last_name'ga ajratamiz
     first_name = request.data.get('first_name') or request.data.get('name') or "CEO"
     last_name = request.data.get('last_name') or f"_{phone[-4:]}"
 
@@ -60,14 +62,14 @@ def verify_ceo(request):
     otp.is_used = True
     otp.save()
 
-    # 🟢 TO'G'RILANDI: 'name' o'rniga model maydonlari 'first_name' va 'last_name' ishlatildi
+    # 🟢 TO'G'RILANDI: To'g'ri Employee modeli chaqirildi va 'is_verified' o'rniga xavfsiz 'is_active' ishlatildi
     employee, created = Employee.objects.get_or_create(
         phone=phone,
         defaults={
             'first_name': first_name,
             'last_name': last_name,
             'is_ceo': True,
-            'is_verified': True,
+            'is_active': True,
             'password': make_password('temporary_pass')
         }
     )
@@ -75,6 +77,7 @@ def verify_ceo(request):
     if not created:
         employee.first_name = first_name
         employee.last_name = last_name
+        employee.is_ceo = True
         employee.save()
 
     return Response({"success": True, "message": "Telefon raqam tasdiqlandi. Endi kompaniya yarating."})
@@ -89,7 +92,8 @@ def create_company(request):
     password = request.data.get('password')
 
     try:
-        employee = Employee.objects.get(phone=phone, is_verified=True, company__isnull=True)
+        # 🟢 TO'G'RILANDI: 'is_verified' maydoni modelda bo'lmagani uchun shartdan olib tashlandi
+        employee = Employee.objects.get(phone=phone, company__isnull=True)
     except Employee.DoesNotExist:
         return Response({"error": "Avval telefon raqamni tasdiqlang yoki kompaniya allaqachon ochilgan!"},
                         status=status.HTTP_400_BAD_REQUEST)
@@ -126,7 +130,8 @@ def login_employee(request):
     password = request.data.get('password')
 
     try:
-        employee = Employee.objects.get(phone=phone, is_verified=True)
+        # 🟢 TO'G'RILANDI: Modelga moslashtirildi
+        employee = Employee.objects.get(phone=phone, is_active=True)
     except Employee.DoesNotExist:
         return Response({"error": "Foydalanuvchi topilmadi!"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -148,7 +153,6 @@ def login_employee(request):
         "refresh_token": str(refresh),
         "user": {
             "id": employee.id,
-            # 🟢 TO'G'RILANDI: 'name' o'rniga ism-familiya birlashtirildi
             "first_name": employee.first_name,
             "last_name": employee.last_name,
             "is_ceo": employee.is_ceo,
@@ -163,7 +167,6 @@ def login_employee(request):
 def forget_password(request):
     phone = request.data.get('phone')
     if not Employee.objects.filter(phone=phone).exists():
-        # 🟢 TO'G'RILANDI: status=44 noto'g'ri xato o'rniga toza HTTP_400 qo'yildi
         return Response({"error": "Bu raqamli xodim tizimda yo'q!"}, status=status.HTTP_400_BAD_REQUEST)
 
     code = str(random.randint(100000, 999999))
