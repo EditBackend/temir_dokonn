@@ -1,7 +1,12 @@
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from organization.models import TenantModel
+
+
+
+
 
 class AppPage(TenantModel):
     name = models.CharField(max_length=100, verbose_name="Sahifa nomi")
@@ -25,7 +30,7 @@ class RolePermission(TenantModel):
     def __str__(self):
         return f"{self.role.name} - {self.page.name} huquqlari"
 
-User = get_user_model()
+# User = get_user_model()
 class Branch(models.Model):
     name = models.CharField(max_length=100)
     address = models.TextField(blank=True, null=True)
@@ -56,7 +61,7 @@ class Expense(TenantModel):
     payment_type = models.CharField(max_length=20, choices=PAYMENT_TYPES)
     branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True)
     note = models.TextField(blank=True, null=True)
-    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    created_by = models.ForeignKey('api.Employee', on_delete=models.SET_NULL, null=True, blank=True)
     is_deleted = models.BooleanField(default=False)  # soft delete
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -73,42 +78,76 @@ class Role(TenantModel):
 
 
 
-class Employee(TenantModel):
+
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from organization.models import TenantModel
+
+
+class EmployeeManager(BaseUserManager):
+    def create_user(self, phone, password=None, **extra_fields):
+        if not phone:
+            raise ValueError('Telefon raqam shart!')
+        extra_fields.setdefault('is_active', True)
+        user = self.model(phone=phone, **extra_fields)
+        if password:
+            user.set_password(password)
+        else:
+            user.set_password('temporary_pass')
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, phone, password=None, **extra_fields):
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+        return self.create_user(phone, password, **extra_fields)
+
+
+# api/models.py ichidagi Employee modelini toping va ichini mana shunday yangilang:
+
+class Employee(AbstractBaseUser, PermissionsMixin, TenantModel):
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
     login = models.CharField(max_length=150, unique=True, null=True, blank=True)
-    phone = models.CharField(
-        max_length=20,
-        unique=True
-    )  # login sifatida ishlaydi
-
-    password = models.CharField(
-        max_length=255
-    )  # keyinchalik hashing qilish mumkin
+    phone = models.CharField(max_length=20, unique=True)
+    password = models.CharField(max_length=255)
 
     role = models.ForeignKey(
-        Role,
+        'Role',
         on_delete=models.SET_NULL,
         null=True,
         related_name="employees"
     )
-
     is_active = models.BooleanField(default=True)
-
+    is_staff = models.BooleanField(default=False)
+    is_ceo = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    # 🟢 TO'QNASHUVNI BARTARAF ETISH UCHUN MANA SHU 2 TA MAYDONNI QO'SHAMIZ:
+    groups = models.ManyToManyField(
+        'auth.Group',
+        related_name='api_employee_groups',  # Nom o'zgatirildi
+        blank=True,
+        verbose_name='groups',
+        help_text='The groups this user belongs to.'
+    )
+    user_permissions = models.ManyToManyField(
+        'auth.Permission',
+        related_name='api_employee_permissions',  # Nom o'zgartirildi
+        blank=True,
+        verbose_name='user permissions',
+        help_text='Specific permissions for this user.'
+    )
+
+    objects = EmployeeManager()
+
+    USERNAME_FIELD = 'phone'
+    REQUIRED_FIELDS = ['first_name', 'last_name']
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
-
-
 class ActivityLog(TenantModel):
-    """
-    Kim nima qilganini yozib boradi
-    har bir harakat saqlanadi.
-    kimdir omborga kirim qilsa yoziladi,
-    kimdir sotsa ham yozilib boradi.
 
-    """
+
 
     employee = models.ForeignKey(
         Employee,

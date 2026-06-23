@@ -53,9 +53,8 @@ class Company(models.Model):
         return self.name
 
 
-# ==========================================
-# 🟢 YANGILANGAN XODIM/USER MODELI
-# ==========================================
+
+
 class Employee(AbstractBaseUser, PermissionsMixin):
     name = models.CharField(max_length=100)
     phone = models.CharField(max_length=20, unique=True)

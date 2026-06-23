@@ -73,7 +73,7 @@ class EmployeeCreateSerializer(serializers.ModelSerializer):
 
         fields = [
             'id', 'first_name', 'last_name', 'phone', 'password',
-            'is_active', 'role', 'role_name'
+            'is_active', 'is_ceo','role', 'role_name'
         ]
         extra_kwargs = {
             'role': {'required': False}
@@ -110,20 +110,20 @@ class EmployeeCreateSerializer(serializers.ModelSerializer):
         password = validated_data.pop('password', None)
         request = self.context.get('request')
 
-        # Kompaniyani biriktirish
-        if request and hasattr(request.user, 'company'):
-            validated_data['company'] = request.user.company
+        # Kompaniyani xavfsiz biriktirish
+        if request and hasattr(request, 'user') and request.user.is_authenticated:
+            if hasattr(request.user, 'company'):
+                validated_data['company'] = request.user.company
 
-        employee = Employee.objects.create(**validated_data)
+        # Xodimni UserManager orqali xavfsiz paroli bilan yaratamiz
+        from .models import Employee
+        employee = Employee.objects.create_user(**validated_data)
 
-        # Parolni xavfsiz hashlab saqlash
         if password:
             employee.set_password(password)
             employee.save()
 
         return employee
-
-
 EmployeeSerializer = EmployeeCreateSerializer
 
 #  Mahsulotlar uchun to'g'rilangan serializer

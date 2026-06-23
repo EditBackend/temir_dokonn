@@ -74,12 +74,12 @@ SESSION_COOKIE_SECURE = True
 
 
 
-# temir_dokonn/settings.py
+
+
 
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 1000,
-    #  Djangoning o'z standart SimpleJWT va Session autentifikatsiyasini qaytaramiz
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
@@ -91,14 +91,15 @@ REST_FRAMEWORK = {
 }
 
 
-AUTH_USER_MODEL = 'organization.Employee'
+AUTH_USER_MODEL = 'api.Employee'
+
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'AUTH_HEADER_TYPES': ('Bearer',),
-    'USER_MODEL': 'organization.Employee',
+    'USER_MODEL': 'api.Employee', #  Bu yer ham api.Employee bo'ladi
     'USER_ID_FIELD': 'id',
-    'USER_ID_CLAIM': 'user_id', # Buni ham qo'shib qo'ying
+    'USER_ID_CLAIM': 'user_id',
 }
 
 
@@ -126,13 +127,6 @@ TEMPLATES = [
 
 
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
-#
 
 DATABASES = {
     'default': dj_database_url.config(
@@ -157,6 +151,9 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+
+
 
 
 
