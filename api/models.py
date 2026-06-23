@@ -139,6 +139,7 @@ class Employee(AbstractBaseUser, PermissionsMixin, TenantModel):
         help_text='Specific permissions for this user.'
     )
 
+
     objects = EmployeeManager()
 
     USERNAME_FIELD = 'phone'
