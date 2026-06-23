@@ -130,6 +130,7 @@ class Employee(AbstractBaseUser, PermissionsMixin, TenantModel):
         verbose_name='groups',
         help_text='The groups this user belongs to.'
     )
+
     user_permissions = models.ManyToManyField(
         'auth.Permission',
         related_name='api_employee_permissions',  # Nom o'zgartirildi
