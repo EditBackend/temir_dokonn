@@ -134,18 +134,18 @@ def login_employee(request):
     except Employee.DoesNotExist:
         return Response({"error": "Foydalanuvchi topilmadi!"}, status=status.HTTP_404_NOT_FOUND)
 
-    # 2. Parolni tekshiramiz
+
     if not check_password(password, employee.password):
         return Response({"error": "Parol noto'g'ri!"}, status=status.HTTP_400_BAD_REQUEST)
 
-    # 🟢 XAVFSIZLIK: Agar xodim hali kompaniya yaratmagan bo'lsa, tarifni tekshirmasdan kirishga ruxsat bermaymiz
+
     if not employee.company:
         return Response({
             "error": "Sizda hali ro'yxatdan o'tgan kompaniya yo'q! Avval kompaniya yarating.",
             "code": "NO_COMPANY"  # Frontend statusni bilishi uchun qulaylik
         }, status=status.HTTP_400_BAD_REQUEST)
 
-    # 3. Tarif muddatini tekshirish (faqat kompaniyasi borlar uchun)
+
     sub = CompanySubscription.objects.filter(company=employee.company, status__in=['active', 'trialing']).last()
     if not sub or sub.end_date < timezone.now():
         if sub:
@@ -153,7 +153,8 @@ def login_employee(request):
             sub.save()
         return Response({"error": "Sizning tarif muddatingiz tugagan!"}, status=status.HTTP_402_PAYMENT_REQUIRED)
 
-    # Tokenlarni yaratish
+
+
     refresh = RefreshToken.for_user(employee)
 
     return Response({
@@ -169,7 +170,8 @@ def login_employee(request):
         }
     }, status=status.HTTP_200_OK)
 
-# Parolni unutganda kod yuborish
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def forget_password(request):
@@ -184,7 +186,8 @@ def forget_password(request):
     return Response({"success": True, "message": "Parolni tiklash kodi Telegram botga yuborildi."})
 
 
-# Yangi parolingizni saqlash
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def reset_password(request):

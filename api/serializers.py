@@ -35,6 +35,8 @@ class UnitSerializer(serializers.ModelSerializer):
         if request and hasattr(request.user, 'company'):
             validated_data['company'] = request.user.company
         return super().create(validated_data)
+
+
 class RoleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Role
@@ -65,67 +67,76 @@ class RoleSerializer(serializers.ModelSerializer):
 
 class EmployeeCreateSerializer(serializers.ModelSerializer):
     role_name = serializers.CharField(source='role.name', required=False, default="-")
+    # role maydonini faqat ID (int) emas, matn (str) kelsa ham xato bermaydigan qilamiz
+    role = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     password = serializers.CharField(write_only=True, required=False)
 
     class Meta:
         model = Employee
-
-
         fields = [
             'id', 'first_name', 'last_name', 'phone', 'password',
-            'is_active', 'is_ceo','role', 'role_name'
+            'is_active', 'is_ceo', 'role', 'role_name'
         ]
-        extra_kwargs = {
-            'role': {'required': False}
-        }
 
     def validate(self, attrs):
-        role_id = self.initial_data.get('role')
+        # initial_data dan kelayotgan qiymatni olamiz
+        role_input = self.initial_data.get('role')
         role_name_input = self.initial_data.get('role_name')
 
-        from .models import Role
+        role_obj = None
 
-        if role_id:
-            if isinstance(role_id, dict):
-                role_id = role_id.get('id')
-            try:
-                attrs['role'] = Role.objects.get(id=int(role_id))
-            except (Role.DoesNotExist, ValueError, TypeError):
-                raise serializers.ValidationError({"role": "Bunday Rol ID topilmadi."})
+        # 1. Agar role maydoni yuborilgan bo'lsa
+        if role_input:
+            # Agar ob'ekt (dict) ko'rinishida kelgan bo'lsa
+            if isinstance(role_input, dict):
+                role_input = role_input.get('id') or role_input.get('name')
 
+            # Agar ID (raqam) bo'lsa
+            if str(role_input).isdigit():
+                role_obj = Role.objects.filter(id=int(role_input)).first()
+            else:
+                # Agar frontend "seller" yoki "admin" deb matn yuborgan bo'lsa
+                role_obj = Role.objects.filter(name__iexact=str(role_input).strip()).first()
+                if not role_obj:
+                    role_obj = Role.objects.create(name=str(role_input).strip())
+
+        # 2. Agar role_name_input orqali kelgan bo'lsa
         elif role_name_input:
-            try:
-                role_obj = Role.objects.filter(name__iexact=str(role_name_input).strip()).first()
-                if role_obj:
-                    attrs['role'] = role_obj
-                else:
-                    role_obj = Role.objects.create(name=str(role_name_input).strip())
-                    attrs['role'] = role_obj
-            except Exception:
-                raise serializers.ValidationError({"role_name": "Rolni biriktirishda xatolik."})
+            role_obj = Role.objects.filter(name__iexact=str(role_name_input).strip()).first()
+            if not role_obj:
+                role_obj = Role.objects.create(name=str(role_name_input).strip())
 
+        # Modelga Role ob'ektini xavfsiz biriktiramiz
+        attrs['role'] = role_obj
         return attrs
 
     def create(self, validated_data):
         password = validated_data.pop('password', None)
         request = self.context.get('request')
 
-        # Kompaniyani xavfsiz biriktirish
+        # 🟢 TO'G'RILANDI: Kompaniyani CEO foydalanuvchidan xavfsiz va aniq ajratib olish
         if request and hasattr(request, 'user') and request.user.is_authenticated:
-            if hasattr(request.user, 'company'):
-                validated_data['company'] = request.user.company
+            user = request.user
+            if hasattr(user, 'company') and user.company:
+                validated_data['company'] = user.company
+            elif hasattr(user, 'employee_profile') and user.employee_profile.company:
+                validated_data['company'] = user.employee_profile.company
 
-        # Xodimni UserManager orqali xavfsiz paroli bilan yaratamiz
-        from .models import Employee
+        # Xodimni UserManager orqali yaratish
         employee = Employee.objects.create_user(**validated_data)
 
+        # Parol o'rnatish (agar yuborilmagan bo'lsa, telefon raqamining oxirgi 4 ta raqamini parol qilamiz)
         if password:
             employee.set_password(password)
-            employee.save()
+        else:
+            phone_str = str(validated_data.get('phone', '1234'))
+            employee.set_password(phone_str[-4:])
 
+        employee.save()
         return employee
-EmployeeSerializer = EmployeeCreateSerializer
 
+
+EmployeeSerializer = EmployeeCreateSerializer
 #  Mahsulotlar uchun to'g'rilangan serializer
 class ProductSerializer(serializers.ModelSerializer):
     # Ham camelCase, ham snake_case qilib ikkala variantini ham beramiz!

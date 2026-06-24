@@ -93,13 +93,10 @@ def receive_customer_payment(request, customer_id):
         customer=customer,
         amount=payment_amount,
         payment_type=payment_type,
-        company=current_company  #  To'lov tarixiga ham kompaniya biriktirildi!
+        company=current_company
     )
-
     try:
         from .models import ActivityLog
-
-
         ActivityLog.objects.create(
             action=f"Mijoz {customer.name} {payment_amount} so'm qarzini uzdi. To'lov turi: {payment_type}",
             employee=request.user if hasattr(request.user, 'employee') else None  # Agar xodim ulanadigan bo'lsa
@@ -184,7 +181,8 @@ def archive_list(request):
     ]
     return Response(data)
 
-# 1. EMPLOYEE DETAIL
+
+
 class EmployeeDetailView(APIView):
     permission_classes = [IsAuthenticated]  #  SaaS xavfsizligi uchun login shart!
 
