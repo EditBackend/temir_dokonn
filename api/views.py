@@ -125,6 +125,8 @@ def customer_profile_details(request, customer_id):
         return Response({"success": False, "error": "Mijoz topilmadi yoki sizga tegishli emas"}, status=404)
 
 
+
+
     payments = customer.customer_debt_payments.all().order_by('-created_at')
     payments_data = [
         {

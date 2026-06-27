@@ -5,7 +5,6 @@ from .models import Product, Sale, Category, Supplier, WarehouseIncome, Customer
 
 User = get_user_model()
 
-
 class UnitSerializer(serializers.ModelSerializer):
     company = serializers.PrimaryKeyRelatedField(read_only=True)
 
@@ -23,7 +22,7 @@ class UnitSerializer(serializers.ModelSerializer):
             company = request.user.company
             name = attrs.get('name')
 
-            #  Bazaga borishdan oldin xavfsizlik tekshiruvi:
+
             if Unit.objects.filter(company=company, name=name).exists():
                 raise serializers.ValidationError({
                     "name": "Sizning kompaniyangizda ushbu o'lchov birligi allaqachon mavjud!"
@@ -122,10 +121,11 @@ class EmployeeCreateSerializer(serializers.ModelSerializer):
             elif hasattr(user, 'employee_profile') and user.employee_profile.company:
                 validated_data['company'] = user.employee_profile.company
 
-        # Xodimni UserManager orqali yaratish
+
+
         employee = Employee.objects.create_user(**validated_data)
 
-        # Parol o'rnatish (agar yuborilmagan bo'lsa, telefon raqamining oxirgi 4 ta raqamini parol qilamiz)
+
         if password:
             employee.set_password(password)
         else:
@@ -137,9 +137,10 @@ class EmployeeCreateSerializer(serializers.ModelSerializer):
 
 
 EmployeeSerializer = EmployeeCreateSerializer
-#  Mahsulotlar uchun to'g'rilangan serializer
+
 class ProductSerializer(serializers.ModelSerializer):
-    # Ham camelCase, ham snake_case qilib ikkala variantini ham beramiz!
+
+
     supplierName = serializers.CharField(source='supplier.name', read_only=True, default="-")
     supplier_name = serializers.CharField(source='supplier.name', read_only=True, default="-")
 
