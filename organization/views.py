@@ -44,7 +44,6 @@ def register_request(request):
 
     return Response({"success": True, "message": "Tasdiqlash kodi botga yuborildi."})
 
-
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def verify_ceo(request):
@@ -52,7 +51,6 @@ def verify_ceo(request):
     code = request.data.get('code')
 
     first_name = request.data.get('first_name') or request.data.get('name') or "CEO"
-    last_name = request.data.get('last_name') or f"_{phone[-4:]}"
 
     # 1. Kod va telefonni tekshirish
     otp = VerificationCode.objects.filter(phone=phone, code=code, is_used=False).order_by('-id').first()
@@ -62,26 +60,26 @@ def verify_ceo(request):
     otp.is_used = True
     otp.save()
 
-    # 🟢 TO'G'RILANDI: To'g'ri Employee modeli chaqirildi va 'is_verified' o'rniga xavfsiz 'is_active' ishlatildi
+    # 🟢 TO'G'RILANDI: Modelda fieldlar yo'qligi sababli xato bermasligi uchun xavfsiz get_or_create
     employee, created = Employee.objects.get_or_create(
         phone=phone,
         defaults={
-            'first_name': first_name,
-            'last_name': last_name,
             'is_ceo': True,
             'is_active': True,
             'password': make_password('temporary_pass')
         }
     )
 
-    if not created:
-        employee.first_name = first_name
-        employee.last_name = last_name
-        employee.is_ceo = True
-        employee.save()
+    #  Agar modelda 'name' yoki 'first_name' bo'lsa, xato bermay sekingina saqlaymiz
+    for field_name in ['name', 'first_name', 'full_name']:
+        if hasattr(employee, field_name):
+            setattr(employee, field_name, first_name)
+            break
+
+    employee.is_ceo = True
+    employee.save()
 
     return Response({"success": True, "message": "Telefon raqam tasdiqlandi. Endi kompaniya yarating."})
-
 
 # Kompaniya yaratish va 7 kunlik demo berish
 @api_view(['POST'])
@@ -121,7 +119,6 @@ def create_company(request):
     )
 
     return Response({"success": True, "message": "Kompaniya va 7 kunlik demo reja muvaffaqiyatli yaratildi!"})
-
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login_employee(request):
@@ -129,22 +126,18 @@ def login_employee(request):
     password = request.data.get('password')
 
     try:
-        # 1. Xodimni bazadan qidiramiz
         employee = Employee.objects.get(phone=phone, is_active=True)
     except Employee.DoesNotExist:
         return Response({"error": "Foydalanuvchi topilmadi!"}, status=status.HTTP_404_NOT_FOUND)
 
-
     if not check_password(password, employee.password):
         return Response({"error": "Parol noto'g'ri!"}, status=status.HTTP_400_BAD_REQUEST)
-
 
     if not employee.company:
         return Response({
             "error": "Sizda hali ro'yxatdan o'tgan kompaniya yo'q! Avval kompaniya yarating.",
-            "code": "NO_COMPANY"  # Frontend statusni bilishi uchun qulaylik
+            "code": "NO_COMPANY"
         }, status=status.HTTP_400_BAD_REQUEST)
-
 
     sub = CompanySubscription.objects.filter(company=employee.company, status__in=['active', 'trialing']).last()
     if not sub or sub.end_date < timezone.now():
@@ -153,9 +146,10 @@ def login_employee(request):
             sub.save()
         return Response({"error": "Sizning tarif muddatingiz tugagan!"}, status=status.HTTP_402_PAYMENT_REQUIRED)
 
-
-
     refresh = RefreshToken.for_user(employee)
+
+    #  TO'G'RILANDI: Model fieldlaridan kelib chiqib, frontendga foydalanuvchi ismini xavfsiz uzatish
+    user_display_name = getattr(employee, 'name', None) or getattr(employee, 'first_name', None) or "CEO"
 
     return Response({
         "success": True,
@@ -163,15 +157,12 @@ def login_employee(request):
         "refresh_token": str(refresh),
         "user": {
             "id": employee.id,
-            "first_name": employee.first_name,
-            "last_name": employee.last_name,
-            "is_ceo": employee.is_ceo,
+            "first_name": user_display_name,
+            "last_name": "",
+            "is_ceo": getattr(employee, 'is_ceo', True),
             "company": employee.company.name if employee.company else None
         }
     }, status=status.HTTP_200_OK)
-
-
-
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def forget_password(request):
