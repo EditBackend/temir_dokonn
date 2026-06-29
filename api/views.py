@@ -941,7 +941,6 @@ class SupplierViewSet(TenantViewSetMixin, ModelViewSet): #  TenantViewSetMixin q
             #  INCOME CREATE & GET PAYMENT TYPEs
 
 
-
 @csrf_exempt
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
@@ -950,23 +949,34 @@ def create_income(request):
         types = PaymentType.objects.all()
         data = [{"id": t.id, "name": t.name} for t in types]
         return Response(data)
+
     if request.method == 'POST':
         supplier_id = request.data.get("supplier")
         items = request.data.get("lines")
         employee_id = request.data.get("employee")
-        # Frontendchi xohlagan 'payment_type' nomini ham, 'payment_type_id' nomini ham tekshirib olamiz:
-        payment_type_id = request.data.get("payment_type") or request.data.get("payment_type_id")
+        payment_type_input = request.data.get("payment_type") or request.data.get("payment_type_id")
+
         if not supplier_id:
             return Response({"error": "Supplier bo'sh"}, status=400)
         if not items:
             return Response({"error": "Items bo'sh"}, status=400)
-        if not payment_type_id:
-            return Response({"error": "To'lov turi (payment_type_id) tanlanmagan"}, status=400)
+        if not payment_type_input:
+            return Response({"error": "To'lov turi (payment_type) tanlanmagan"}, status=400)
+
         supplier_id = int(supplier_id)
-        try:
-            payment_type = PaymentType.objects.get(id=int(payment_type_id))
-        except (PaymentType.DoesNotExist, ValueError, TypeError):
-            return Response({"error": "Bunday to'lov turi topilmadi"}, status=400)
+
+        # 🟢 TO'G'RILANDI: To'lov turini ID yoki Matn bo'yicha xavfsiz aniqlash va yaratish
+        payment_type = None
+        if str(payment_type_input).isdigit():
+            payment_type = PaymentType.objects.filter(id=int(payment_type_input)).first()
+
+        if not payment_type:
+            # Agar frontend "Naqd", "Nasiya" deb matn yuborgan bo'lsa yoki baza toza bo'lsa
+            clean_name = str(payment_type_input).strip()
+            payment_type = PaymentType.objects.filter(name__iexact=clean_name).first()
+            if not payment_type:
+                payment_type = PaymentType.objects.create(name=clean_name)
+
         p_type_name = payment_type.name.lower()
         chek_umumiy_summasi = Decimal('0.00')
         current_company = request.user.company
@@ -976,23 +986,25 @@ def create_income(request):
                 '-check_number').first()
             new_check_number = (last_income.check_number + 1) if last_income and last_income.check_number else 1
             common_time = timezone.now()
+
             try:
                 supplier = Supplier.objects.select_for_update().get(id=supplier_id)
             except Supplier.DoesNotExist:
                 return Response({"error": "Ta'minotchi topilmadi"}, status=404)
+
             for item in items:
                 try:
                     product = Product.objects.select_for_update().get(id=int(item.get("product")))
                 except (Product.DoesNotExist, TypeError, ValueError):
                     return Response({"error": f"Mahsulot (ID: {item.get('product')}) topilmadi"}, status=404)
+
                 quantity = Decimal(str(item.get("quantity", 0)))
                 price = Decimal(str(item.get("price", 0)))
                 total_price = quantity * price
 
-                # Jami chek summasini yig'ib boramiz
                 chek_umumiy_summasi += total_price
 
-                # 1. Kirimni yaratish (payment_type bilan birga)
+                # 1. Kirimni yaratish
                 WarehouseIncome.objects.create(
                     supplier=supplier,
                     product=product,
@@ -1024,14 +1036,13 @@ def create_income(request):
                     product.supplier_id = supplier_id
                 product.save()
 
-
             if 'nasiya' in p_type_name:
                 supplier.debt = chek_umumiy_summasi
                 supplier.save()
 
                 total_nasiya = WarehouseIncome.objects.filter(
                     supplier=supplier,
-                    company=current_company, #  Kompaniya filtri
+                    company=current_company,
                     payment_type__name__icontains='nasiya'
                 ).aggregate(total=Sum('total_price'))['total'] or Decimal('0.00')
 
@@ -1048,33 +1059,30 @@ def create_income(request):
                         amount=chek_umumiy_summasi,
                         payment_type=expense_payment_type,
                         note=f"Omborga kirim #{new_check_number}. Ta'minotchi: {supplier.name}",
-                        company=current_company #  Xarajatga ham kompaniya yozildi
+                        company=current_company
                     )
                 supplier.debt = Decimal('0.00')
                 supplier.save()
 
-        return Response({"success": True, "data": {"check_number": new_check_number, "total_amount": float(chek_umumiy_summasi)}})
-
+        # ActivityLog'ni return'dan tepaga, tranzaksiyadan tashqariga to'g'ri joylashtiramiz
         if employee_id:
-            ActivityLog.objects.create(
-                employee_id=employee_id,
-                action=f"{new_check_number}-sonli chek bilan omborga kirim qildi"
-            )
+            try:
+                ActivityLog.objects.create(
+                    employee_id=employee_id,
+                    action=f"{new_check_number}-sonli chek bilan omborga kirim qildi"
+                )
+            except Exception:
+                pass
 
-
-
-    return Response({
-        "success": True,
-        "message": "Kirim muvaffaqiyatli saqlandi",
-        "data": {
-            "check_number": new_check_number,
-            "items_count": len(items),
-            "total_amount": float(chek_umumiy_summasi)
-        }
-    })
-
-
-
+        return Response({
+            "success": True,
+            "message": "Kirim muvaffaqiyatli saqlandi",
+            "data": {
+                "check_number": new_check_number,
+                "items_count": len(items),
+                "total_amount": float(chek_umumiy_summasi)
+            }
+        })
 #  INCOME DETAIL
 @api_view(['GET'])
 def income_check_details(request, check_number=None):
