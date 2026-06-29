@@ -674,7 +674,6 @@ class ProductViewSet(TenantViewSetMixin, ModelViewSet):
             return Response({"success": False, "error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
-
 class SaleViewSet(TenantViewSetMixin, ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Sale.objects.all().order_by('-created_at')
@@ -682,7 +681,6 @@ class SaleViewSet(TenantViewSetMixin, ModelViewSet):
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
-
         items = request.data.get("lines")
         customer = request.data.get("customer")
         payment_type = request.data.get("payment_type") or None
@@ -727,7 +725,7 @@ class SaleViewSet(TenantViewSetMixin, ModelViewSet):
                         product=product,
                         quantity=deduct_qty,
                         price=price,
-                        customer_id=customer,  # <--- 'customer' emas, 'customer_id' qildik
+                        customer_id=customer,
                         payment_type=payment_type,
                         check_number=new_check_number,
                         created_at=common_time,
@@ -741,7 +739,7 @@ class SaleViewSet(TenantViewSetMixin, ModelViewSet):
                     product=product,
                     quantity=quantity,
                     price=price,
-                    customer_id=customer,  # <--- 'customer' emas, 'customer_id' qildik
+                    customer_id=customer,
                     payment_type=payment_type,
                     check_number=new_check_number,
                     created_at=common_time
@@ -779,12 +777,9 @@ class SaleViewSet(TenantViewSetMixin, ModelViewSet):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def sales_summary(request):
-
     sana_from = request.query_params.get('sana_from')
     sana_to = request.query_params.get('sana_to')
-
     sales = Sale.objects.filter(company=request.user.company)
-
     if sana_from and sana_to:
         sales = sales.filter(
             created_at__date__range=[
@@ -792,7 +787,6 @@ def sales_summary(request):
                 parse_date(sana_to)
             ]
         )
-
     daily_summary = (
         sales
         .annotate(date=TruncDate('created_at'))
@@ -800,16 +794,14 @@ def sales_summary(request):
         .annotate(
             total_sales=Sum('total_price'),
             total_quantity=Sum('quantity'),
-            total_checks=Sum(1)  #  nechta sotuv (chek emas, sotuvlar soni)
+            total_checks=Sum(1)
         )
         .order_by('-date')
     )
-
     grand_total = sales.aggregate(
         total_sum=Sum('total_price'),
         total_quantity=Sum('quantity')
     )
-
     return Response({
         "sana_from": sana_from,
         "sana_to": sana_to,
@@ -817,7 +809,7 @@ def sales_summary(request):
         "umumiy_summa": grand_total
     })
 
-#  Oxirgi chek raqamni olish
+
 
 @api_view(['GET'])
 def last_check_number(request):
@@ -945,33 +937,45 @@ class SupplierViewSet(TenantViewSetMixin, ModelViewSet): #  TenantViewSetMixin q
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def create_income(request):
+    # 🟢 1. GET SO'ROVI: Frontend to'lov turlarini so'rab kelganda toza ro'yxat qaytaramiz
     if request.method == 'GET':
         types = PaymentType.objects.all()
-        data = [{"id": t.id, "name": t.name} for t in types]
-        return Response(data)
+        # Agar baza toza bo'lsa va to'lov turlari bo'lmasa, standart turlarni yaratib qo'yamiz
+        if not types.exists():
+            PaymentType.objects.get_or_create(name="Naqd")
+            PaymentType.objects.get_or_create(name="Nasiya")
+            PaymentType.objects.get_or_create(name="Karta")
+            types = PaymentType.objects.all()
 
+        data = [{"id": t.id, "name": t.name} for t in types]
+        return Response(data, status=200)
+
+    # 🟢 2. POST SO'ROVI: Omborga haqiqiy kirimni saqlash mantiqi
     if request.method == 'POST':
         supplier_id = request.data.get("supplier")
         items = request.data.get("lines")
         employee_id = request.data.get("employee")
         payment_type_input = request.data.get("payment_type") or request.data.get("payment_type_id")
 
+        # Validatsiyalar
         if not supplier_id:
-            return Response({"error": "Supplier bo'sh"}, status=400)
-        if not items:
-            return Response({"error": "Items bo'sh"}, status=400)
+            return Response({"error": "Ta'minotchi (supplier) tanlanmagan"}, status=400)
+        if not items or len(items) == 0:
+            return Response({"error": "Mahsulotlar ro'yxati (lines) bo'sh"}, status=400)
         if not payment_type_input:
             return Response({"error": "To'lov turi (payment_type) tanlanmagan"}, status=400)
 
-        supplier_id = int(supplier_id)
+        try:
+            supplier_id = int(supplier_id)
+        except (ValueError, TypeError):
+            return Response({"error": "Ta'minotchi ID raqam bo'lishi kerak"}, status=400)
 
-        # 🟢 TO'G'RILANDI: To'lov turini ID yoki Matn bo'yicha xavfsiz aniqlash va yaratish
+        # To'lov turini xavfsiz topish yoki yaratish
         payment_type = None
         if str(payment_type_input).isdigit():
             payment_type = PaymentType.objects.filter(id=int(payment_type_input)).first()
 
         if not payment_type:
-            # Agar frontend "Naqd", "Nasiya" deb matn yuborgan bo'lsa yoki baza toza bo'lsa
             clean_name = str(payment_type_input).strip()
             payment_type = PaymentType.objects.filter(name__iexact=clean_name).first()
             if not payment_type:
@@ -979,9 +983,14 @@ def create_income(request):
 
         p_type_name = payment_type.name.lower()
         chek_umumiy_summasi = Decimal('0.00')
-        current_company = request.user.company
+
+        # Kompaniyani tekshirish
+        current_company = getattr(request.user, 'company', None)
+        if not current_company and hasattr(request.user, 'employee_profile'):
+            current_company = request.user.employee_profile.company
 
         with transaction.atomic():
+            # Chek raqamini hisoblash
             last_income = WarehouseIncome.objects.filter(company=current_company).select_for_update().order_by(
                 '-check_number').first()
             new_check_number = (last_income.check_number + 1) if last_income and last_income.check_number else 1
@@ -993,18 +1002,22 @@ def create_income(request):
                 return Response({"error": "Ta'minotchi topilmadi"}, status=404)
 
             for item in items:
-                try:
-                    product = Product.objects.select_for_update().get(id=int(item.get("product")))
-                except (Product.DoesNotExist, TypeError, ValueError):
-                    return Response({"error": f"Mahsulot (ID: {item.get('product')}) topilmadi"}, status=404)
+                product_identifier = item.get("product")
+                if not product_identifier:
+                    return Response({"error": "Mahsulot ID ko'rsatilmagan"}, status=400)
 
-                quantity = Decimal(str(item.get("quantity", 0)))
-                price = Decimal(str(item.get("price", 0)))
+                try:
+                    product = Product.objects.select_for_update().get(id=int(product_identifier))
+                except (Product.DoesNotExist, TypeError, ValueError):
+                    return Response({"error": f"Mahsulot (ID: {product_identifier}) topilmadi"}, status=404)
+
+                quantity = Decimal(str(item.get("quantity", 0) or item.get("soni", 0)))
+                price = Decimal(str(item.get("price", 0) or item.get("narx", 0)))
                 total_price = quantity * price
 
                 chek_umumiy_summasi += total_price
 
-                # 1. Kirimni yaratish
+                # 1. Kirim hujjatini yaratish
                 WarehouseIncome.objects.create(
                     supplier=supplier,
                     product=product,
@@ -1018,7 +1031,7 @@ def create_income(request):
                     company=current_company
                 )
 
-                # 2. Batch (Partiya) yaratish
+                # 2. Partiya yaratish
                 Batch.objects.create(
                     product=product,
                     supplier=supplier,
@@ -1036,6 +1049,7 @@ def create_income(request):
                     product.supplier_id = supplier_id
                 product.save()
 
+            # Nasiya yoki Xarajat hisobi
             if 'nasiya' in p_type_name:
                 supplier.debt = chek_umumiy_summasi
                 supplier.save()
@@ -1046,7 +1060,7 @@ def create_income(request):
                     payment_type__name__icontains='nasiya'
                 ).aggregate(total=Sum('total_price'))['total'] or Decimal('0.00')
 
-                supplier.total_debt = total_nasiya
+                supplier.total_debt = total_nasi_ya = total_nasiya
                 supplier.save()
             else:
                 category, _ = ExpenseCategory.objects.get_or_create(name="Ombor kirimi uchun")
@@ -1064,7 +1078,7 @@ def create_income(request):
                 supplier.debt = Decimal('0.00')
                 supplier.save()
 
-        # ActivityLog'ni return'dan tepaga, tranzaksiyadan tashqariga to'g'ri joylashtiramiz
+        # Log yozish
         if employee_id:
             try:
                 ActivityLog.objects.create(
@@ -1074,6 +1088,7 @@ def create_income(request):
             except Exception:
                 pass
 
+        # To'g'ri va yakuniy muvaffaqiyatli javob
         return Response({
             "success": True,
             "message": "Kirim muvaffaqiyatli saqlandi",
@@ -1082,7 +1097,9 @@ def create_income(request):
                 "items_count": len(items),
                 "total_amount": float(chek_umumiy_summasi)
             }
-        })
+        }, status=201)
+
+    return Response({"error": "Method not allowed"}, status=405)
 #  INCOME DETAIL
 @api_view(['GET'])
 def income_check_details(request, check_number=None):
