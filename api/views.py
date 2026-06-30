@@ -688,116 +688,110 @@ class SaleViewSet(TenantViewSetMixin, ModelViewSet):
         if not items:
             return Response({"error": "Items yuborilmadi"}, status=400)
 
-            # 🟢 TO'G'RILANDI: Tizimga kirgan foydalanuvchidan kompaniyani xavfsiz ajratib olish
-            current_company = getattr(request.user, 'company', None)
-            if not current_company and hasattr(request.user, 'employee_profile'):
-                current_company = request.user.employee_profile.company
+        current_company = getattr(request.user, 'company', None)
+        if not current_company and hasattr(request.user, 'employee_profile'):
+            current_company = request.user.employee_profile.company
 
-            # Chek raqamini faqat shu kompaniya doirasida hisoblash uchun filtr qo'shildi
-            last_sale = Sale.objects.filter(company=current_company).order_by('-check_number').first()
-            new_check_number = (
-                last_sale.check_number + 1
-                if last_sale and last_sale.check_number
-                else 1
-            )
-            common_time = timezone.now()
-            created_sales = []
+        last_sale = Sale.objects.filter(company=current_company).order_by('-check_number').first()
+        new_check_number = (
+            last_sale.check_number + 1
+            if last_sale and last_sale.check_number
+            else 1
+        )
+        common_time = timezone.now()
+        created_sales = []
 
-            for item in items:
-                try:
-                    product = Product.objects.get(id=int(item.get("product")))
-                except Product.DoesNotExist:
-                    return Response({"error": "Mahsulot topilmadi"}, status=404)
+        for item in items:
+            try:
+                product = Product.objects.get(id=int(item.get("product")))
+            except Product.DoesNotExist:
+                return Response({"error": "Mahsulot topilmadi"}, status=404)
 
-                quantity = Decimal(str(item.get("quantity", 0)))
-                price = Decimal(str(item.get("price", 0)))
+            quantity = Decimal(str(item.get("quantity", 0)))
+            price = Decimal(str(item.get("price", 0)))
 
-                if product.quantity < quantity:
-                    return Response(
-                        {"error": f"{product.name} omborda yetarli emas"},
-                        status=400
-                    )
+            if product.quantity < quantity:
+                return Response(
+                    {"error": f"{product.name} omborda yetarli emas"},
+                    status=400
+                )
 
-                remaining_qty = quantity
+            remaining_qty = quantity
 
-                # FIFO batchlarni olish (kompaniya filtri bilan yanada xavfsizroq)
-                batches = Batch.objects.filter(
-                    product=product,
-                    qty_left__gt=0,
-                    company=current_company
-                ).order_by('received_date')
+            batches = Batch.objects.filter(
+                product=product,
+                qty_left__gt=0,
+                company=current_company
+            ).order_by('received_date')
 
-                if batches.exists():
-                    for batch in batches:
-                        if remaining_qty <= 0:
-                            break
-                        deduct_qty = min(batch.qty_left, remaining_qty)
-                        batch.qty_left -= deduct_qty
-                        batch.save()
+            if batches.exists():
+                for batch in batches:
+                    if remaining_qty <= 0:
+                        break
+                    deduct_qty = min(batch.qty_left, remaining_qty)
+                    batch.qty_left -= deduct_qty
+                    batch.save()
 
-                        # 🟢 TO'G'RILANDI: company=current_company qo'shildi
-                        sale = Sale.objects.create(
-                            product=product,
-                            quantity=deduct_qty,
-                            price=price,
-                            customer_id=customer,
-                            payment_type=payment_type,
-                            check_number=new_check_number,
-                            created_at=common_time,
-                            batch=batch,
-                            company=current_company
-                        )
-                        SaleItem.objects.create(sale=sale, product=product, quantity=deduct_qty, price=price)
-                        created_sales.append(sale)
-                        remaining_qty -= deduct_qty
-                else:
-                    # TO'G'RILANDI: company=current_company qo'shildi
                     sale = Sale.objects.create(
                         product=product,
-                        quantity=quantity,
+                        quantity=deduct_qty,
                         price=price,
                         customer_id=customer,
                         payment_type=payment_type,
                         check_number=new_check_number,
                         created_at=common_time,
+                        batch=batch,
                         company=current_company
                     )
-                    SaleItem.objects.create(sale=sale, product=product, quantity=quantity, price=price)
+                    SaleItem.objects.create(sale=sale, product=product, quantity=deduct_qty, price=price)
                     created_sales.append(sale)
-
-                product.quantity -= quantity
-                product.save()
-
-            # Log yaratishga ham activity xavfsizligi qo'shildi
-            try:
-                ActivityLog.objects.create(
-                    employee_id=request.data.get("employee") or request.user.id,
-                    action=f"Sotuv amalga oshirdi (chek {new_check_number})"
+                    remaining_qty -= deduct_qty
+            else:
+                sale = Sale.objects.create(
+                    product=product,
+                    quantity=quantity,
+                    price=price,
+                    customer_id=customer,
+                    payment_type=payment_type,
+                    check_number=new_check_number,
+                    created_at=common_time,
+                    company=current_company
                 )
-            except Exception:
-                pass
+                SaleItem.objects.create(sale=sale, product=product, quantity=quantity, price=price)
+                created_sales.append(sale)
 
-            serializer = self.get_serializer(created_sales, many=True)
+            product.quantity -= quantity
+            product.save()
 
-            # TELEGRAMGA YUBORISH
-            try:
-                message = f"🛒 YANGI SAVDO!\n\n🧾 Chek: {new_check_number}\n\n"
-                total_sum = 0
-                for sale in created_sales:
-                    total = float(sale.price) * float(sale.quantity)
-                    total_sum += total
-                    message += f"📦 {sale.product.name}\n"
-                    message += f"⚖️ {sale.quantity} x {sale.price} = {total}\n\n"
-                message += f"💰 Jami: {total_sum} so'm"
-                send_telegram_message(message)
-            except Exception:
-                pass
+        try:
+            ActivityLog.objects.create(
+                employee_id=request.data.get("employee") or request.user.id,
+                action=f"Sotuv amalga oshirdi (chek {new_check_number})"
+            )
+        except Exception:
+            pass
 
-            return Response({
-                "check_number": new_check_number,
-                "sales": serializer.data
-            }, status=201)
+        serializer = self.get_serializer(created_sales, many=True)
 
+        # TELEGRAMGA YUBORISH
+        try:
+            message = f"🛒 YANGI SAVDO!\n\n🧾 Chek: {new_check_number}\n\n"
+            total_sum = 0
+            for sale in created_sales:
+                total = float(sale.price) * float(sale.quantity)
+                total_sum += total
+                message += f"📦 {sale.product.name}\n"
+                message += f"⚖️ {sale.quantity} x {sale.price} = {total}\n\n"
+            message += f"💰 Jami: {total_sum} so'm"
+            send_telegram_message(message)
+        except Exception:
+            pass
+
+        #  ENG ASOSIY JOYI: Return endi tsikllardan butunlay tashqarida, eng tagida to'g'ri turibdi!
+        return Response({
+            "check_number": new_check_number,
+            "sales": serializer.data
+        }, status=201)
 
 # HISOBOT
 @api_view(['GET'])
