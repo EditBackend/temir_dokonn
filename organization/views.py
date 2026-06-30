@@ -9,12 +9,13 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.response import Response
 from rest_framework import status
 
-# 🟢 TO'G'RILANDI: Employee modelini 'api' ilovasidan to'g'ri import qildik!
+
+
 from api.models import Employee
 from .models import Company, TariffPlan, CompanySubscription, VerificationCode
 
 TELEGRAM_BOT_TOKEN = "8837150918:AAFCLCzlPXILiaktZy8OHP28ynntXlYiRVY"
-TELEGRAM_CHAT_ID = "7724173791"  # Guruh yoki admin ID si
+TELEGRAM_CHAT_ID = "7724173791"
 
 
 def send_otp_via_telegram(phone, code):
@@ -27,7 +28,8 @@ def send_otp_via_telegram(phone, code):
         print(f"Telegram yuborishda xato: {e}")
 
 
-# Telefon raqam kiritilganda OTP kod yuborish
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register_request(request):
@@ -147,8 +149,8 @@ def login_employee(request):
         return Response({"error": "Sizning tarif muddatingiz tugagan!"}, status=status.HTTP_402_PAYMENT_REQUIRED)
 
     refresh = RefreshToken.for_user(employee)
-
-    #  TO'G'RILANDI: Model fieldlaridan kelib chiqib, frontendga foydalanuvchi ismini xavfsiz uzatish
+  
+    #  TO'G'RILANDI Model fieldlaridan kelib chiqib, frontendga foydalanuvchi ismini xavfsiz uzatish
     user_display_name = getattr(employee, 'name', None) or getattr(employee, 'first_name', None) or "CEO"
 
     return Response({
