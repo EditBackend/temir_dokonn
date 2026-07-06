@@ -17,9 +17,7 @@ class TenantModel(models.Model):
         abstract = True
 
 
-# ==========================================
-# 🟢 CUSTOM USER MANAGER (Employee uchun shart)
-# ==========================================
+
 class EmployeeManager(BaseUserManager):
     def create_user(self, phone, password=None, **extra_fields):
         if not phone:
@@ -94,15 +92,20 @@ class TariffPlan(models.Model):
 # Obuna/Shartnoma tarixi modeli
 class CompanySubscription(models.Model):
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='subscriptions')
-    tariff = models.ForeignKey(TariffPlan, models.SET_NULL, null=True)
+    tariff = models.ForeignKey(TariffPlan, models.SET_NULL, null=True,
+                               blank=True)  # blank=True qo'shildi, admin panelda xato bermasligi uchun
     start_date = models.DateTimeField(default=timezone.now)
     end_date = models.DateTimeField()
     status = models.CharField(max_length=20, default='active')
 
     def __str__(self):
-        return f"{self.company.name} - {self.tariff.name}"
+        # Kompaniya nomini xavfsiz olish
+        company_name = self.company.name if self.company else f"Kompaniya #{self.company_id}"
 
+        # Tariff nomini xavfsiz olish (Agar None bo'lsa portlamaydi)
+        tariff_name = self.tariff.name if self.tariff else "Tarif tanlanmagan"
 
+        return f"{company_name} - {tariff_name}"
 # OTP Kodlar
 class VerificationCode(models.Model):
     phone = models.CharField(max_length=20)
