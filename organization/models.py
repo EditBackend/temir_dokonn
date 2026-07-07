@@ -102,7 +102,7 @@ class CompanySubscription(models.Model):
         # Kompaniya nomini xavfsiz olish
         company_name = self.company.name if self.company else f"Kompaniya #{self.company_id}"
 
-        # Tariff nomini xavfsiz olish (Agar None bo'lsa portlamaydi)
+
         tariff_name = self.tariff.name if self.tariff else "Tarif tanlanmagan"
 
         return f"{company_name} - {tariff_name}"
