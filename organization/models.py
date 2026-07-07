@@ -106,6 +106,9 @@ class CompanySubscription(models.Model):
 
         tariff_name = self.tariff.name if self.tariff else "Tarif tanlanmagan"
 
+
+
+
         return f"{company_name} - {tariff_name}"
 # OTP Kodlar
 class VerificationCode(models.Model):
