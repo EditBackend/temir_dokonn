@@ -103,6 +103,7 @@ class CompanySubscription(models.Model):
         company_name = self.company.name if self.company else f"Kompaniya #{self.company_id}"
 
 
+
         tariff_name = self.tariff.name if self.tariff else "Tarif tanlanmagan"
 
         return f"{company_name} - {tariff_name}"
